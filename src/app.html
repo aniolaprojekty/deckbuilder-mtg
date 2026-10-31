@@ -51,6 +51,11 @@ textarea{min-height:120px;font-size:13px}
 .prog i{display:block;height:100%;background:var(--ac);width:0}
 #toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:8px;display:none;z-index:9}
 .warn{color:var(--b3)}
+.kw{padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}.kw:last-child{border:0}
+.kw b{color:var(--ac)}
+.sg{padding:8px;border-bottom:1px solid var(--line);cursor:pointer}
+.cimg{width:100%;max-width:320px;border-radius:4.5%;display:block;margin:0 auto 8px}
+.sym{display:inline-block;min-width:1.4em;padding:0 3px;border-radius:9px;background:#2c303b;font-size:12px;text-align:center}
 .seg{display:flex;background:#0f1115;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{flex:1;background:none;border:0;color:var(--mu);padding:8px 4px;font:inherit;font-size:13px}
 .seg button.on{background:var(--ac);color:#111;font-weight:600}
@@ -97,6 +102,22 @@ textarea{min-height:120px;font-size:13px}
   </div>
 </section>
 
+<section id="t-card">
+  <div class="box">
+    <h3>Wyjaśnij kartę</h3>
+    <div class="mu">Zrób zdjęcie jednej karty (nazwa w górnej części kadru) albo wpisz nazwę.</div>
+    <div class="row" style="margin:8px 0;flex-wrap:nowrap">
+      <label class="btn" for="cardPhoto" style="flex:0 0 auto">📷 Zdjęcie karty</label>
+      <input type="file" id="cardPhoto" accept="image/*" capture="environment" hidden>
+      <input id="cardQ" placeholder="…lub wpisz nazwę" autocomplete="off" style="flex:1">
+    </div>
+    <div id="cardSugg"></div>
+    <div class="prog"><i id="cardProg"></i></div>
+    <div id="cardMsg" class="mu"></div>
+  </div>
+  <div id="cardOut"></div>
+</section>
+
 <section id="t-pre">
   <div class="box">
     <input id="preSearch" placeholder="Szukaj preconu, dowódcy lub setu…">
@@ -114,6 +135,7 @@ textarea{min-height:120px;font-size:13px}
 <nav>
   <button data-t="col" class="on"><b>📚</b>Kolekcja</button>
   <button data-t="scan"><b>📷</b>Skaner</button>
+  <button data-t="card"><b>🔎</b>Karta</button>
   <button data-t="pre"><b>🗂️</b>Precony</button>
   <button data-t="up"><b>⬆️</b>Upgrade</button>
 </nav>
@@ -187,8 +209,8 @@ function role(c){
   if(/(destroy|exile) all (creatures|nonland|other|permanents|artifacts|enchantments)|all creatures get -|deals? \S+ damage to each (creature|other creature)|return all (nonland|creatures)|each player sacrifices all creatures/.test(o))return 'wipe';
   if(/counter target/.test(o))return 'counter';
   if(/(destroy|exile) (up to (one|two) )?target (creature|artifact|enchantment|planeswalker|nonland|permanent|attacking|tapped)|deals? (\d+|x) damage to (any target|target creature|target attacking)|target (creature|opponent|player) sacrifices|return target (creature|nonland permanent) to its owner's hand|fights? (target|up to one target)/.test(o))return 'removal';
-  if(/search your library for (a|up to \w+|two) (basic )?(land|forest|plains|island|swamp|mountain)|\badd \{|\badd (one|two|three) mana|mana of any (one )?color|put (a|that) land card .*onto the battlefield/.test(o))return 'ramp';
-  if(/draws? (a|an|one|two|three|four|five|x|that many) (additional )?cards?|draw cards equal|investigate/.test(o))return 'draw';
+  if(/search your library for (a|up to \w+|two) (basic )?(land|forest|plains|island|swamp|mountain)|\badd \{|\badd (one|two|three) mana|mana of any (one )?color|create (a|an|one|two|three|x|that many) treasure|put (a|that) land card .*onto the battlefield/.test(o))return 'ramp';
+  if(/\bdraw (a|an|one|two|three|four|five|x|that many) (additional )?cards?|you draw cards?|draw cards equal|investigate/.test(o))return 'draw';
   if(/search your library for an? (card|creature|instant|sorcery|artifact|enchantment|planeswalker|legendary)/.test(o))return 'tutor';
   if(/(hexproof|indestructible|protection from|phase out)/.test(o)&&/instant/.test(t))return 'protect';
   if(/creature/.test(front))return 'creature';
@@ -608,6 +630,202 @@ $('#photo').onchange=async e=>{
   }catch(err){msg.innerHTML=`<span class="warn">${esc(err.message||err)}</span>`}
 };
 $('#scanAdd').onclick=()=>{const m={};scanRes.forEach(i=>{const v=i&&i.value.trim();if(v)m[v]=(m[v]||0)+1});const k=addToCol(m);toast(`Dodano ${k} kart`);$('#scanGrid').innerHTML='';$('#scanAdd').disabled=true;$('#scanMsg').textContent='';$('#scanProg').style.width=0};
+
+/* ---------- single card: scan + explain ---------- */
+const KW={
+'flying':'Latanie — może go zablokować tylko stwór z Flying albo Reach.',
+'reach':'Zasięg — może blokować stwory z Flying.',
+'trample':'Stratowanie — nadwyżkę obrażeń ponad to, co zabija blokujących, zadaje broniącemu się graczowi.',
+'deathtouch':'Dotyk śmierci — każda ilość obrażeń zadanych przez to źródło stworowi wystarczy, by go zniszczyć.',
+'lifelink':'Wysysanie życia — obrażenia zadane przez to źródło dodają Ci tyle samo życia.',
+'vigilance':'Czujność — atakowanie nie tapuje tego stwora.',
+'haste':'Pośpiech — może atakować i używać zdolności z {T} od razu w turze, w której wszedł.',
+'first strike':'Pierwsze uderzenie — zadaje obrażenia w walce przed stworami bez tej zdolności.',
+'double strike':'Podwójne uderzenie — zadaje obrażenia w walce dwa razy: w kroku pierwszego uderzenia i w zwykłym.',
+'menace':'Groza — może go zablokować tylko dwa lub więcej stworów.',
+'hexproof':'Odporność — przeciwnicy nie mogą go wskazywać (target) swoimi czarami i zdolnościami.',
+'shroud':'Osłona — nikt (także Ty) nie może go wskazywać.',
+'indestructible':'Niezniszczalność — nie ginie od efektów „destroy” ani od śmiertelnych obrażeń (ale exile, -X/-X i poświęcenie działają).',
+'defender':'Obrońca — nie może atakować.',
+'flash':'Błysk — można go zagrać w dowolnym momencie, jak instant.',
+'ward':'Ochrona (Ward) — gdy przeciwnik wskaże ten permanent, jego czar/zdolność zostaje skontrowana, chyba że zapłaci podany koszt.',
+'protection':'Protekcja od X — nie może być blokowany, wskazywany, zaczarowany/wyposażony ani ranny przez źródła X.',
+'prowess':'Biegłość — za każdy rzucony czar nie-stwór dostaje +1/+1 do końca tury.',
+'equip':'Wyposażenie — zapłać koszt, by przypiąć ekwipunek do swojego stwora (tylko w tempie sorcery).',
+'enchant':'Zaczaruj — aura musi być przypięta do wskazanego typu obiektu.',
+'scry':'Wróżenie N — popatrz na N wierzchnich kart biblioteki i każdą zostaw na górze lub połóż na spód, w dowolnej kolejności.',
+'surveil':'Inwigilacja N — popatrz na N wierzchnich kart; każdą zostaw na górze lub odłóż na cmentarz.',
+'mill':'Mielenie N — wierzchnie N kart biblioteki trafia na cmentarz.',
+'cycling':'Cykl — zapłać koszt i odrzuć tę kartę z ręki, by dobrać kartę.',
+'kicker':'Dopłata — przy rzucaniu możesz zapłacić dodatkowy koszt, by uzyskać mocniejszy efekt.',
+'multikicker':'Wielokrotna dopłata — dodatkowy koszt możesz zapłacić dowolną liczbę razy.',
+'flashback':'Powrót — możesz rzucić tę kartę z cmentarza za koszt flashback; potem idzie na wygnanie.',
+'convoke':'Zwołanie — każdy stwór, którego tapniesz, płaci {1} lub jedną manę swojego koloru.',
+'cascade':'Kaskada — po rzuceniu odkrywaj karty z biblioteki do pierwszej nie-ziemi o niższym koszcie; możesz ją rzucić za darmo.',
+'landfall':'Wylądowanie — efekt odpala się, gdy pod Twoją kontrolą wchodzi ziemia.',
+'treasure':'Skarb — token-artefakt: {T}, poświęć go: dodaj jedną manę dowolnego koloru.',
+'food':'Jedzenie — token-artefakt: {2}, {T}, poświęć: zyskaj 3 życia.',
+'investigate':'Śledztwo — stwórz token Clue: {2}, poświęć go: dobierz kartę.',
+'proliferate':'Proliferacja — wybierz dowolne permanenty/graczy z żetonami i dodaj każdemu po jednym żetonie, który już ma.',
+'toxic':'Toksyczność N — gdy zada graczowi obrażenia walki, gracz dostaje też N żetonów trucizny.',
+'infect':'Infekcja — obrażenia stworom zadaje jako żetony -1/-1, a graczom jako żetony trucizny (10 = przegrana).',
+'wither':'Uwiąd — obrażenia stworom zadaje jako żetony -1/-1.',
+'persist':'Trwałość — gdy umrze bez żetonu -1/-1, wraca na pole z żetonem -1/-1.',
+'undying':'Nieśmiertelność — gdy umrze bez żetonu +1/+1, wraca na pole z żetonem +1/+1.',
+'evoke':'Przywołanie — możesz go rzucić taniej; wtedy od razu po wejściu zostaje poświęcony (efekty „gdy wchodzi” działają).',
+'exalted':'Wywyższenie — gdy Twój stwór atakuje sam, dostaje +1/+1 za każdy Twój permanent z exalted.',
+'annihilator':'Anihilator N — gdy atakuje, broniący się gracz poświęca N permanentów.',
+'affinity':'Powinowactwo — kosztuje {1} mniej za każdy kontrolowany obiekt danego typu.',
+'delve':'Przekopanie — każda karta wygnana z Twojego cmentarza płaci {1} kosztu.',
+'storm':'Burza — po rzuceniu kopiujesz ten czar raz za każdy czar rzucony wcześniej w tej turze.',
+'morph':'Morf — możesz zagrać zakrytego jako 2/2 za {3}, a odkryć za koszt morph.',
+'disguise':'Przebranie — zakryty 2/2 z Ward {2}; odkrywasz za koszt disguise.',
+'manifest':'Manifestacja — wierzchnia karta biblioteki wchodzi zakryta jako 2/2; jeśli to stwór, możesz ją odkryć za jej koszt many.',
+'ninjutsu':'Ninjutsu — zapłać koszt i cofnij na rękę swojego niezablokowanego atakującego, by wprowadzić tego stwora atakującego.',
+'partner':'Partner — możesz mieć dwóch dowódców, jeśli obaj mają Partner.',
+'crew':'Załoga N — tapnij stwory o łącznej sile N, by pojazd stał się stworem do końca tury.',
+'mutate':'Mutacja — rzuć na swojego nie-ludzkiego stwora; łączą się w jeden obiekt z zdolnościami obu.',
+'foretell':'Zapowiedź — w swojej turze za {2} wygnaj zakrytą; później rzucisz ją taniej.',
+'myriad':'Mrowie — gdy atakuje, tworzysz atakujące kopie-tokeny przeciw każdemu innemu przeciwnikowi; znikają po walce.',
+'amass':'Zgromadzenie N — dodaj N żetonów +1/+1 do swojej Armii (lub stwórz token Armii 0/0).',
+'explore':'Eksploracja — odkryj wierzchnią kartę: ziemia idzie na rękę, inna karta daje stworowi +1/+1 (kartę możesz odłożyć na cmentarz).',
+'connive':'Knowanie — dobierz kartę, odrzuć kartę; jeśli odrzuciłeś nie-ziemię, stwór dostaje żeton +1/+1.',
+'fight':'Walka — dwa stwory zadają sobie nawzajem obrażenia równe swojej sile.',
+'goad':'Prowokacja — stwór musi atakować w każdej walce i, jeśli może, nie Ciebie.',
+'monarch':'Monarcha — na koniec tury monarcha dobiera kartę; kto zada mu obrażenia walki, przejmuje tytuł.',
+'the initiative':'Inicjatywa — wchodzisz do Podziemia (Undercity); zadając obrażenia jej posiadaczowi, przejmujesz ją.',
+'ascend':'Wzniesienie — jeśli kontrolujesz 10+ permanentów, dostajesz na stałe „city’s blessing”.',
+'dash':'Szarża — rzuć za koszt dash: ma Haste i wraca na rękę na koniec tury.',
+'unearth':'Odkopanie — wróć z cmentarza z Haste; na koniec tury zostaje wygnany.',
+'embalm':'Balsamowanie — wygnaj z cmentarza, by stworzyć jego token-kopię (biała mumia Zombie).',
+'eternalize':'Uwiecznienie — wygnaj z cmentarza, by stworzyć jego czarny token-kopię 4/4 Zombie.',
+'escape':'Ucieczka — rzuć z cmentarza, płacąc koszt i wygnując inne karty z cmentarza.',
+'encore':'Bis — wygnaj z cmentarza: dla każdego przeciwnika powstaje atakujący go token-kopia z Haste, poświęcany na koniec tury.',
+'bestow':'Obdarowanie — rzuć jako aurę na stwora; gdy ten zniknie, karta staje się z powrotem stworem.',
+'channel':'Kanał — odrzuć tę kartę z ręki i zapłać koszt, by uzyskać efekt.',
+'dredge':'Wydobycie N — zamiast dobrać kartę możesz zmielić N kart i wziąć tę kartę z cmentarza na rękę.',
+'evolve':'Ewolucja — gdy wejdzie Twój stwór o większej sile lub wytrzymałości, ten dostaje żeton +1/+1.',
+'fabricate':'Fabrykacja N — przy wejściu: N żetonów +1/+1 albo N tokenów Servo 1/1.',
+'populate':'Zaludnienie — stwórz kopię jednego ze swoich tokenów-stworów.',
+'riot':'Bunt — wchodzi z żetonem +1/+1 albo z Haste, do wyboru.',
+'training':'Trening — gdy atakuje razem z silniejszym stworem, dostaje żeton +1/+1.',
+'blitz':'Blitz — rzuć za koszt blitz: Haste, a na koniec tury poświęcasz go i dobierasz kartę.',
+'casualty':'Ofiara N — przy rzucaniu możesz poświęcić stwora o sile N+, by skopiować czar.',
+'discover':'Odkrycie N — odkrywaj karty do nie-ziemi o koszcie ≤ N; rzuć ją za darmo albo weź na rękę.',
+'craft':'Rzemiosło — wygnaj ten artefakt i wskazane materiały, by przemienić go na drugą stronę.',
+'offspring':'Potomstwo — dopłać, a przy wejściu stworzysz jego token-kopię 1/1.',
+'plot':'Spisek — wygnaj z ręki za koszt plot; w późniejszej turze rzucisz za darmo w tempie sorcery.',
+'saddle':'Siodło N — tapnij stwory o sile N, by ten wierzchowiec był „osiodłany” do końca tury.',
+'spree':'Szał — wybierz dowolną liczbę trybów, płacąc dodatkowy koszt każdego.',
+'gift':'Prezent — możesz dać przeciwnikowi wskazany prezent, by wzmocnić efekt.',
+'impending':'Nadciąganie — rzuć taniej: wchodzi z żetonami czasu i nie jest stworem, dopóki ich nie straci.',
+'living weapon':'Żywa broń — przy wejściu powstaje token Phyrexian Germ 0/0, do którego ekwipunek jest przypięty.',
+'transform':'Transformacja — karta dwustronna obraca się na drugą stronę.',
+'daybound':'Dzień/Noc — karta przemienia się zależnie od tego, czy jest dzień, czy noc (noc zapada, gdy aktywny gracz nie rzuci czaru).',
+'decayed':'Rozkład — nie może blokować; gdy atakuje, na koniec walki zostaje poświęcony.',
+'exploit':'Wyzysk — przy wejściu możesz poświęcić stwora, by odpalić dodatkowy efekt.',
+'extort':'Wymuszenie — za każdym razem, gdy rzucasz czar, możesz zapłacić {W/B}: każdy przeciwnik traci 1 życie, Ty zyskujesz tyle życia.',
+'changeling':'Zmiennokształtność — ma wszystkie typy stworów.',
+'devour':'Pożarcie N — przy wejściu możesz poświęcić stwory; dostaje N żetonów +1/+1 za każdego.',
+'cumulative upkeep':'Narastający koszt utrzymania — w każdej Twojej fazie upkeep rośnie koszt; nie zapłacisz → poświęcasz.',
+'suspend':'Zawieszenie — wygnaj z N żetonami czasu; co turę ubywa jeden, przy ostatnim rzucasz za darmo.',
+'buyback':'Odkup — dopłać, a czar wraca na rękę zamiast na cmentarz.',
+'retrace':'Ponowienie — rzuć z cmentarza, dodatkowo odrzucając ziemię.',
+'jump-start':'Odskok — rzuć z cmentarza, dodatkowo odrzucając kartę; potem idzie na wygnanie.',
+'aftermath':'Następstwo — drugą połowę karty rzucasz tylko z cmentarza.',
+'splice':'Wplecenie — dopłać, by dodać efekt tej karty do innego czaru Arcane.',
+'rebound':'Odbicie — rzucony z ręki idzie na wygnanie; w Twoim następnym upkeep rzucasz go ponownie za darmo.',
+'miracle':'Cud — jeśli to pierwsza dobrana karta w turze, możesz ją od razu rzucić za koszt miracle.',
+'madness':'Szaleństwo — gdy ją odrzucasz, możesz ją rzucić za koszt madness.',
+'overload':'Przeciążenie — rzuć za koszt overload, a słowo „target” zmienia się na „each”.',
+'emerge':'Wynurzenie — rzuć, poświęcając stwora; koszt maleje o jego koszt many.',
+'companion':'Towarzysz — jeśli talia spełnia warunek, karta zaczyna poza grą; za {3} weźmiesz ją na rękę.',
+'backup':'Wsparcie N — przy wejściu daje N żetonów +1/+1 wskazanemu stworowi; jeśli to inny stwór, dostaje też zdolności tej karty do końca tury.',
+'for mirrodin!':'Za Mirrodin! — przy wejściu powstaje token Rebel 2/2, do którego ekwipunek zostaje przypięty.',
+'incubate':'Inkubacja N — stwórz token Incubator z N żetonami +1/+1; za {2} przemienia się w stwora Phyrexian.',
+'squad':'Oddział — za każdą zapłatę kosztu squad powstaje token-kopia tego stwora.',
+'ravenous':'Żarłoczność — wchodzi z X żetonami +1/+1; przy X ≥ 5 dobierasz kartę.',
+'mobilize':'Mobilizacja N — gdy atakuje, powstaje N atakujących tokenów Warrior 1/1 z Haste, poświęcanych na koniec tury.',
+'station':'Stacja — tapnij innego stwora, by dodać tu tyle żetonów ładunku, ile ma siły (tempo sorcery).',
+'warp':'Warp — rzuć taniej z ręki; na koniec tury idzie na wygnanie, a później możesz go rzucić z wygnania.'
+};
+const symHTML=t=>esc(t).replace(/\{([^}]+)\}/g,(m,x)=>`<span class="sym">${x==='T'?'⟳':x==='Q'?'⟲':x}</span>`).replace(/\n/g,'<br>');
+async function showCard(c){
+  const out=$('#cardOut');put(c);LS.set('mtg.cards',cache);
+  const s=card(c.name),f=c.card_faces||[];
+  const faces=f.length&&!c.oracle_text?f:[c];
+  const imgs=(c.image_uris?[c.image_uris.normal]:f.map(x=>x.image_uris&&x.image_uris.normal)).filter(Boolean);
+  const kws=(c.keywords||[]).map(k=>[k,KW[k.toLowerCase()]]);
+  const txt=(c.oracle_text||f.map(x=>x.oracle_text||'').join(' ')).toLowerCase();
+  // keyword actions not always listed in c.keywords
+  for(const k of ['treasure','food','investigate','proliferate','goad','monarch','the initiative','fight','connive','explore','amass','populate','discover','mill','scry','surveil'])
+    if(txt.includes(k)&&!kws.some(([x])=>x.toLowerCase()===k)&&KW[k])kws.push([k[0].toUpperCase()+k.slice(1),KW[k]]);
+  const owned=collection[c.name]||0;
+  const r=role(s);
+  const flags=[];
+  if(s.gc)flags.push('<span class="pill b3">Game Changer — talia z nią to min. Bracket 3</span>');
+  if(isMLD(s))flags.push('<span class="pill b4">Masowe niszczenie lądów — Bracket 4</span>');
+  if(isXT(s))flags.push('<span class="pill">Dodatkowa tura — kilka takich kart = ryzyko Bracketu 4</span>');
+  const known=COMBOS.filter(p=>p.includes(c.name)).map(p=>p.find(x=>x!==c.name));
+  out.innerHTML=`<div class="box">${imgs.map(u=>`<img class="cimg" src="${esc(u)}" alt="">`).join('')}
+    <h3>${esc(c.name)} ${c.mana_cost?symHTML(c.mana_cost):''}</h3>
+    <div class="mu">${esc(c.type_line||'')} · ${esc((c.set_name||''))}</div>
+    ${faces.map(x=>`${faces.length>1?`<div style="margin-top:8px"><b>${esc(x.name)}</b> ${x.mana_cost?symHTML(x.mana_cost):''}<div class="mu">${esc(x.type_line||'')}</div></div>`:''}<div class="ot">${symHTML(x.oracle_text||'')}${x.power!=null?`<div style="margin-top:6px"><b>${x.power}/${x.toughness}</b></div>`:''}${x.loyalty?`<div>Lojalność: ${x.loyalty}</div>`:''}</div>`).join('')}
+    <div class="row" style="margin-top:8px"><button class="btn" id="cardAdd">＋ Do kolekcji${owned?` (masz ${owned})`:''}</button><a class="btn sec" href="${esc(c.scryfall_uri||'#')}" target="_blank" rel="noopener" style="text-decoration:none">Scryfall ↗</a></div></div>
+  <div class="box"><h3>Co robi</h3>
+    ${kws.length?kws.map(([k,v])=>`<div class="kw"><b>${esc(k)}</b>${v?` <span class="mu">(${esc(v.split(' — ')[0])})</span>`:''} — ${v?esc(v.split(' — ').slice(1).join(' — ')):'<span class="mu">brak opisu w słowniku — patrz tekst karty</span>'}</div>`).join(''):'<div class="mu">Brak słów kluczowych — działanie opisuje tekst karty powyżej.</div>'}
+    <div class="mu" style="margin-top:8px">Symbole: ⟳ = tapnij, {X} = dowolna ilość many, {W}{U}{B}{R}{G} = mana biała/niebieska/czarna/czerwona/zielona, {C} = bezbarwna.</div></div>
+  <div class="box"><h3>W Commanderze</h3>
+    <div>Rola w talii: <b>${ROLE_PL[r]}</b> · Tożsamość kolorów: <b>${s.ci||'bezbarwna'}</b></div>
+    <div>Legalność: <b>${s.lg==='legal'?'legalna':s.lg==='banned'?'ZBANOWANA':s.lg}</b> · Popularność EDHREC: <b>${s.r?'#'+s.r:'—'}</b> · Cena: <b>${s.p!=null?s.p.toFixed(2)+' €':'—'}</b></div>
+    <div style="margin-top:6px">${flags.join('')||'<span class="pill b12">Nie wpływa na bracket</span>'}</div>
+    ${known.length?`<div style="margin-top:6px">Znane combo 2-kartowe z: <b>${known.map(esc).join(', ')}</b></div>`:''}
+    <div id="cardCombos" class="mu" style="margin-top:6px">Szukam combo (Commander Spellbook)…</div></div>
+  <div class="box"><h3>Oficjalne rulingi</h3><div id="cardRulings" class="mu">Wczytuję…</div></div>`;
+  $('#cardAdd').onclick=()=>{addToCol({[c.name]:1});toast('Dodano do kolekcji');showCard(c)};
+  try{const r=await fetch(c.rulings_uri);const j=await r.json();const rs=j.data||[];
+    $('#cardRulings').innerHTML=rs.length?rs.map(x=>`<div class="kw"><span class="mu">${esc(x.published_at)}</span><br>${esc(x.comment)}</div>`).join('')+'<div class="mu" style="margin-top:6px">Rulingi są po angielsku (źródło: Wizards / Scryfall).</div>':'Brak rulingów dla tej karty.'}
+  catch(e){$('#cardRulings').textContent='Nie udało się pobrać rulingów.'}
+  try{const r=await fetch('https://backend.commanderspellbook.com/variants/?limit=8&q='+encodeURIComponent(`card:"${c.name.split(' // ')[0]}"`));if(!r.ok)throw 0;
+    const j=await r.json();const vs=(j.results||[]).map(v=>({with:(v.uses||[]).map(u=>(u.card&&u.card.name)||'').filter(n=>n&&n!==c.name),res:(v.produces||[]).map(p=>(p.feature&&p.feature.name)||p.name||'').filter(Boolean).slice(0,2)}));
+    const el=$('#cardCombos');if(el)el.innerHTML=vs.length?'<b>Combo (Commander Spellbook):</b>'+vs.map(v=>`<div class="kw">＋ ${esc(v.with.join(' + '))}${v.res.length?` <span class="mu">→ ${esc(v.res.join(', '))}</span>`:''}</div>`).join(''):'Brak znanych combo z tą kartą.'}
+  catch(e){const el=$('#cardCombos');if(el)el.textContent='Commander Spellbook niedostępny.'}
+}
+async function lookupCard(q){
+  const msg=$('#cardMsg');msg.textContent='Szukam…';$('#cardSugg').innerHTML='';
+  try{const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(q));
+    if(!r.ok){msg.textContent='Nie znaleziono karty „'+q+'”. Spróbuj wpisać nazwę.';return false}
+    msg.textContent='';await showCard(await r.json());return true}
+  catch(e){msg.innerHTML='<span class="warn">Brak połączenia ze Scryfall.</span>';return false}
+}
+let acT=null;
+$('#cardQ').oninput=()=>{clearTimeout(acT);const q=$('#cardQ').value.trim();if(q.length<3){$('#cardSugg').innerHTML='';return}
+  acT=setTimeout(async()=>{try{const r=await fetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(q));const j=await r.json();
+    $('#cardSugg').innerHTML=(j.data||[]).slice(0,8).map(n=>`<div class="sg" data-n="${esc(n)}">${esc(n)}</div>`).join('')}catch(e){}},250)};
+$('#cardQ').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();lookupCard($('#cardQ').value.trim());$('#cardQ').blur()}};
+$('#cardSugg').onclick=e=>{const n=e.target.closest('[data-n]');if(n){$('#cardQ').value=n.dataset.n;lookupCard(n.dataset.n)}};
+$('#cardPhoto').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;e.target.value='';
+  const msg=$('#cardMsg'),prog=$('#cardProg');$('#cardOut').innerHTML='';
+  try{
+    msg.textContent='Ładuję OCR…';prog.style.width='10%';
+    const img=await createImageBitmap(f);await loadTess();
+    const worker=await Tesseract.createWorker('eng');prog.style.width='40%';
+    // name sits in the top part of the card: OCR the top quarter of the frame
+    const cv=document.createElement('canvas');const sc=Math.min(1,1600/img.width);
+    cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*0.25*sc);
+    const g=cv.getContext('2d');g.filter='grayscale(1) contrast(1.5)';g.drawImage(img,0,0,img.width,img.height*0.25,0,0,cv.width,cv.height);
+    msg.textContent='Odczytuję nazwę…';
+    const {data}=await worker.recognize(cv);await worker.terminate();prog.style.width='80%';
+    const lines=data.text.split('\n').map(l=>l.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim()).filter(l=>l.length>=3).sort((a,b)=>b.length-a.length).slice(0,4);
+    for(const l of lines){msg.textContent='Dopasowuję: „'+l+'”…';
+      const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(l));
+      if(r.ok){prog.style.width='100%';msg.textContent='Rozpoznano z OCR: „'+l+'”';$('#cardQ').value='';await showCard(await r.json());return}
+      await sleep(110)}
+    msg.innerHTML='<span class="warn">Nie rozpoznałem nazwy'+(lines[0]?' (OCR: „'+esc(lines[0])+'”)':'')+'. Zrób zdjęcie bliżej, z nazwą u góry kadru, albo wpisz nazwę.</span>';
+  }catch(err){msg.innerHTML=`<span class="warn">${esc(err.message||err)}</span>`}
+  finally{setTimeout(()=>prog.style.width=0,800)}
+};
 
 /* ---------- init ---------- */
 history.replaceState({t:'col',v:state.view,d:0},'');
