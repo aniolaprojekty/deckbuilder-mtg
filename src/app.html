@@ -268,7 +268,12 @@ const bPill=b=>`<span class="pill ${bCls(b)}">Bracket ${bLabel(b)}</span>`;
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
 // Navigation history so Android "back" steps back instead of closing the app
 let curTab='col';
-function nav(st){history.pushState(st,'')}
+const depth=()=>((history.state&&history.state.d)||0);
+function nav(st){history.pushState({...st,d:depth()+1},'')}
+// Android hardware/gesture back (Capacitor App plugin): step back in our history, exit only at the root
+(function(){const App=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App;
+  if(!App||!App.addListener)return;
+  App.addListener('backButton',()=>{if(depth()>0)history.back();else App.exitApp()});})();
 function show(t,fromPop){
   if(!fromPop&&t!==curTab)nav({t,v:state.view});
   curTab=t;
@@ -605,7 +610,7 @@ $('#photo').onchange=async e=>{
 $('#scanAdd').onclick=()=>{const m={};scanRes.forEach(i=>{const v=i&&i.value.trim();if(v)m[v]=(m[v]||0)+1});const k=addToCol(m);toast(`Dodano ${k} kart`);$('#scanGrid').innerHTML='';$('#scanAdd').disabled=true;$('#scanMsg').textContent='';$('#scanProg').style.width=0};
 
 /* ---------- init ---------- */
-history.replaceState({t:'col',v:state.view},'');
+history.replaceState({t:'col',v:state.view,d:0},'');
 renderCol();
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
