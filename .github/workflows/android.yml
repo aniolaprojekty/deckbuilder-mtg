@@ -1,0 +1,28 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - run: npm ci
+      - run: python3 tools/build.py
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew && cd android && ./gradlew assembleRelease --no-daemon
+      - run: cp android/app/build/outputs/apk/release/app-release.apk deckbuilder-mtg.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: deckbuilder-mtg-apk, path: deckbuilder-mtg.apk }
+      - name: Publish as "latest" release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest deckbuilder-mtg.apk --title "Deckbuilder MTG (build ${{ github.run_number }})" --notes "Automatyczny build z commita ${{ github.sha }}" --latest

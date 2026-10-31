@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Deckbuilder MTG</string>
+    <string name="title_activity_main">Deckbuilder MTG</string>
+    <string name="package_name">pl.aniolaprojekty.deckbuilder</string>
+    <string name="custom_url_scheme">pl.aniolaprojekty.deckbuilder</string>
+</resources>

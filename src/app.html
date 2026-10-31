@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#14161c">
+<title>Deckbuilder MTG</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#14161c;--card:#1e2129;--line:#2c303b;--tx:#e8e9ed;--mu:#9095a3;--ac:#e0a43a;--ok:#5bbf7a;--bad:#e25c5c;--b3:#e0a43a;--b4:#e25c5c}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--tx);padding-bottom:72px}
+header{padding:14px 16px 6px;font-weight:700;font-size:18px}
+header small{color:var(--mu);font-weight:400;font-size:13px;display:block}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0f1115;border-top:1px solid var(--line);z-index:5}
+nav button{flex:1;background:none;border:0;color:var(--mu);padding:10px 2px 12px;font-size:12px}
+nav button b{display:block;font-size:20px;line-height:1.1}
+nav button.on{color:var(--ac)}
+section{display:none;padding:8px 14px}
+section.on{display:block}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+h3{margin:0 0 8px;font-size:15px}
+.mu{color:var(--mu);font-size:13px}
+input,textarea,select{width:100%;background:#0f1115;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
+textarea{min-height:120px;font-size:13px}
+.btn{background:var(--ac);color:#111;border:0;border-radius:8px;padding:10px 14px;font-weight:600;font:inherit;font-weight:600}
+.btn.sec{background:#2c303b;color:var(--tx)}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{flex:0 0 auto}
+.list{max-height:none}
+.item{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border:0}
+.item .grow{flex:1;min-width:0}
+.item img{width:46px;border-radius:4px;flex:0 0 46px}
+.deck{cursor:pointer}
+.deck.sel{outline:2px solid var(--ac);border-radius:8px}
+.pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:600;background:#2c303b;color:var(--tx);margin:2px 4px 2px 0}
+.b12{background:#2f5a3c}.b3{background:#7a5a1d}.b4{background:#7a2a2a}
+.sw{display:grid;grid-template-columns:46px 1fr;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.sw img{width:46px;border-radius:4px}
+.in{color:var(--ok)}.out{color:var(--bad)}
+.sw label{display:flex;gap:6px;align-items:center;font-size:13px}
+.sw input[type=checkbox]{width:auto}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.cell{background:#0f1115;border:1px solid var(--line);border-radius:6px;padding:4px;font-size:12px}
+.cell canvas{width:100%;display:block;border-radius:3px}
+.cell input{padding:4px;font-size:12px;margin-top:4px}
+.prog{height:4px;background:#2c303b;border-radius:2px;overflow:hidden;margin:6px 0}
+.prog i{display:block;height:100%;background:var(--ac);width:0}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:8px;display:none;z-index:9}
+.warn{color:var(--b3)}
+</style>
+</head>
+<body>
+<header>Deckbuilder MTG<small id="sub">Kolekcja → precon → upgrade z kontrolą bracketu</small></header>
+
+<section id="t-col" class="on">
+  <div class="box">
+    <h3>Kolekcja <span id="colCount" class="mu"></span></h3>
+    <div class="row"><input id="colSearch" placeholder="Szukaj w kolekcji…" style="flex:1"></div>
+    <div id="colList" class="list"></div>
+  </div>
+  <div class="box">
+    <h3>Import listy</h3>
+    <div class="mu">Jedna karta w wierszu: „4 Sol Ring”, „1x Arcane Signet (CMR) 297”. Działa z eksportem z Moxfield/Archidekt/ManaBox.</div>
+    <textarea id="imp" placeholder="1 Sol Ring&#10;2 Cultivate"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" id="impBtn">Dodaj do kolekcji</button><button class="btn sec" id="expBtn">Kopiuj kolekcję</button><button class="btn sec" id="clrBtn">Wyczyść</button></div>
+  </div>
+</section>
+
+<section id="t-scan">
+  <div class="box">
+    <h3>Skan strony klasera</h3>
+    <div class="mu">Zrób zdjęcie strony prosto z góry, kadrując samą siatkę kart. Aplikacja tnie zdjęcie na pola i odczytuje nazwy (OCR), a potem dopasowuje je w Scryfall.</div>
+    <div class="row" style="margin:8px 0">
+      <select id="gridSel" style="width:auto"><option value="3x3">3×3 (9 kart)</option><option value="4x3">4×3 (12 kart)</option><option value="2x2">2×2 (4 karty)</option></select>
+      <label class="btn" for="photo">📷 Zdjęcie</label>
+      <input type="file" id="photo" accept="image/*" capture="environment" hidden>
+    </div>
+    <div class="prog"><i id="scanProg"></i></div>
+    <div id="scanMsg" class="mu"></div>
+    <div id="scanGrid" class="grid"></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="scanAdd" disabled>Dodaj rozpoznane do kolekcji</button></div>
+  </div>
+</section>
+
+<section id="t-pre">
+  <div class="box">
+    <input id="preSearch" placeholder="Szukaj preconu, dowódcy lub setu…">
+    <label class="mu" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="preMine" style="width:auto"> Tylko moje precony (★)</label>
+    <div class="mu" style="margin-top:6px" id="preInfo"></div>
+  </div>
+  <div id="preList"></div>
+</section>
+
+<section id="t-up">
+  <div id="upHead" class="box"><span class="mu">Najpierw wybierz precon.</span></div>
+  <div id="upBody"></div>
+</section>
+
+<nav>
+  <button data-t="col" class="on"><b>📚</b>Kolekcja</button>
+  <button data-t="scan"><b>📷</b>Skaner</button>
+  <button data-t="pre"><b>🗂️</b>Precony</button>
+  <button data-t="up"><b>⬆️</b>Upgrade</button>
+</nav>
+<div id="toast"></div>
+
+<script type="application/json" id="precons">/*PRECONS*/</script>
+<script>
+"use strict";
+/* ---------- utils ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+          set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Brak miejsca w pamięci przeglądarki')}}};
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)}
+const SCRY='https://api.scryfall.com';
+const BASICS=new Set(['Plains','Island','Swamp','Mountain','Forest','Wastes','Snow-Covered Plains','Snow-Covered Island','Snow-Covered Swamp','Snow-Covered Mountain','Snow-Covered Forest']);
+
+/* ---------- precons ---------- */
+const P=JSON.parse($('#precons').textContent);
+const DECKS=P.decks.map(d=>({id:d.id,name:d.n,set:d.s,date:d.d,commanders:d.c.map(i=>P.names[i]),cards:d.l.map(([i,q])=>({name:P.names[i],qty:q}))}));
+
+/* ---------- state ---------- */
+let collection=LS.get('mtg.collection',{});           // name -> qty
+let cache=LS.get('mtg.cards',{});                     // lower name -> slim card
+let state=LS.get('mtg.state',{deck:null,accepted:[]});
+let mine=new Set(LS.get('mtg.mine',[]));
+const saveState=()=>LS.set('mtg.state',state);
+const saveCol=()=>LS.set('mtg.collection',collection);
+
+/* ---------- Scryfall ---------- */
+function slim(c){
+  const f=c.card_faces||[];
+  const o=c.oracle_text!=null?c.oracle_text:f.map(x=>x.oracle_text||'').join('\n');
+  const img=(c.image_uris||(f[0]&&f[0].image_uris)||{}).small||'';
+  return {n:c.name,ci:(c.color_identity||[]).join(''),t:c.type_line||f.map(x=>x.type_line).join(' // '),o,cmc:c.cmc||0,
+          r:c.edhrec_rank||null,gc:!!c.game_changer,lg:(c.legalities||{}).commander||'legal',img};
+}
+function put(c){const s=slim(c);cache[s.n.toLowerCase()]=s;const front=s.n.split(' // ')[0].toLowerCase();if(!cache[front])cache[front]=s;return s}
+const card=n=>cache[n.toLowerCase()]||cache[n.split(' // ')[0].toLowerCase()];
+async function fetchCards(names,onProg){
+  const need=[...new Set(names)].filter(n=>!card(n));
+  const missing=[];
+  for(let i=0;i<need.length;i+=75){
+    const batch=need.slice(i,i+75);
+    const r=await fetch(SCRY+'/cards/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifiers:batch.map(n=>({name:n}))})});
+    if(!r.ok)throw new Error('Scryfall: błąd '+r.status);
+    const j=await r.json();
+    (j.data||[]).forEach(put);
+    (j.not_found||[]).forEach(x=>missing.push(x.name));
+    onProg&&onProg(Math.min(1,(i+75)/need.length));
+    await sleep(110);
+  }
+  // retry missing by front face name
+  const retry=missing.filter(n=>n.includes(' // ')||n.includes('/'));
+  for(const n of retry){
+    try{const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(n.split('/')[0].trim()));if(r.ok){const c=put(await r.json());cache[n.toLowerCase()]=c}}catch(e){}
+    await sleep(110);
+  }
+  LS.set('mtg.cards',cache);
+  return missing.filter(n=>!card(n));
+}
+
+/* ---------- card roles ---------- */
+const ROLE_PL={land:'Ląd',ramp:'Rampa',draw:'Dobór',removal:'Usuwanie',wipe:'Czyszczenie stołu',counter:'Kontra',tutor:'Tutor',protect:'Ochrona',creature:'Stwór',other:'Inne'};
+function role(c){
+  const o=(c.o||'').toLowerCase(), t=(c.t||'').toLowerCase(), front=t.split('//')[0];
+  if(/\bland\b/.test(front)&&!/creature/.test(front))return 'land';
+  if(/(destroy|exile) all (creatures|nonland|other|permanents|artifacts|enchantments)|all creatures get -|deals? \S+ damage to each (creature|other creature)|return all (nonland|creatures)|each player sacrifices all creatures/.test(o))return 'wipe';
+  if(/counter target/.test(o))return 'counter';
+  if(/(destroy|exile) (up to (one|two) )?target (creature|artifact|enchantment|planeswalker|nonland|permanent|attacking|tapped)|deals? (\d+|x) damage to (any target|target creature|target attacking)|target (creature|opponent|player) sacrifices|return target (creature|nonland permanent) to its owner's hand|fights? (target|up to one target)/.test(o))return 'removal';
+  if(/search your library for (a|up to \w+|two) (basic )?(land|forest|plains|island|swamp|mountain)|\badd \{|\badd (one|two|three) mana|mana of any (one )?color|put (a|that) land card .*onto the battlefield/.test(o))return 'ramp';
+  if(/draws? (a|an|one|two|three|four|five|x|that many) (additional )?cards?|draw cards equal|investigate/.test(o))return 'draw';
+  if(/search your library for an? (card|creature|instant|sorcery|artifact|enchantment|planeswalker|legendary)/.test(o))return 'tutor';
+  if(/(hexproof|indestructible|protection from|phase out)/.test(o)&&/instant/.test(t))return 'protect';
+  if(/creature/.test(front))return 'creature';
+  return 'other';
+}
+
+/* ---------- bracket engine ---------- */
+// Mass land denial (WotC examples + text heuristics)
+const MLD=new Set(['Armageddon','Ravages of War','Catastrophe','Decree of Annihilation','Jokulhaups','Obliterate','Ruination','Sunder','Boom // Bust','Winter Orb','Static Orb','Rising Waters','Hokori, Dust Drinker','Blood Moon','Magus of the Moon','Back to Basics','Ritual of Subdual','Epicenter','Devastation','Keldon Firebombers','Impending Disaster','Wildfire','Burning of Xinye','Destructive Force','Ravages of War','Global Ruin','Cataclysm','Tectonic Break','Death Cloud','Numot, the Devastator','Contamination','Mana Vortex','Thoughts of Ruin','Myojin of Infinite Rage','Desolation Angel','Apocalypse','Upheaval','Acid Rain','Flashfires','Tsunami','Boil','Choke','Stasis','Vorinclex, Voice of Hunger','Urza\'s Sylex','Armageddon Clock','Bearer of the Heavens']);
+// (Bearer/Apocalypse/Upheaval are debatable; flagged as "do sprawdzenia" below)
+const MLD_SOFT=new Set(['Upheaval','Apocalypse','Bearer of the Heavens','Urza\'s Sylex','Armageddon Clock','Stasis','Tsunami','Boil','Flashfires','Acid Rain','Choke','Vorinclex, Voice of Hunger']);
+function isMLD(c){
+  if(MLD.has(c.n)&&!MLD_SOFT.has(c.n))return true;
+  const o=(c.o||'').toLowerCase();
+  return /destroy all lands|each player sacrifices (all|half|\w+) lands|destroy all nonbasic lands|lands don't untap|nonbasic lands are mountains|exile all lands/.test(o);
+}
+const isXT=c=>/take an extra turn|takes? an extra turn/i.test(c.o||'');
+// Known 2-card combos (fallback when Commander Spellbook is unreachable)
+const COMBOS=[
+ ["Thassa's Oracle","Demonic Consultation"],["Thassa's Oracle","Tainted Pact"],["Laboratory Maniac","Demonic Consultation"],["Jace, Wielder of Mysteries","Demonic Consultation"],["Jace, Wielder of Mysteries","Tainted Pact"],
+ ["Isochron Scepter","Dramatic Reversal"],["Exquisite Blood","Sanguine Bond"],["Exquisite Blood","Vito, Thorn of the Dusk Rose"],["Heliod, Sun-Crowned","Walking Ballista"],
+ ["Kiki-Jiki, Mirror Breaker","Zealous Conscripts"],["Kiki-Jiki, Mirror Breaker","Pestermite"],["Kiki-Jiki, Mirror Breaker","Deceiver Exarch"],["Kiki-Jiki, Mirror Breaker","Restoration Angel"],["Kiki-Jiki, Mirror Breaker","Felidar Guardian"],
+ ["Splinter Twin","Pestermite"],["Splinter Twin","Deceiver Exarch"],["Dualcaster Mage","Twinflame"],["Dualcaster Mage","Heat Shimmer"],["Mikaeus, the Unhallowed","Triskelion"],
+ ["Devoted Druid","Vizier of Remedies"],["Devoted Druid","Quillspike"],["Niv-Mizzet, Parun","Curiosity"],["Niv-Mizzet, the Firemind","Curiosity"],["Niv-Mizzet, Parun","Ophidian Eye"],
+ ["Power Artifact","Basalt Monolith"],["Power Artifact","Grim Monolith"],["Thopter Foundry","Sword of the Meek"],["Peregrine Drake","Deadeye Navigator"],["Worldgorger Dragon","Animate Dead"],
+ ["Bloodchief Ascension","Mindcrank"],["Duskmantle Guildmage","Mindcrank"],["Painter's Servant","Grindstone"],["Saheeli Rai","Felidar Guardian"],["Earthcraft","Squirrel Nest"],
+ ["Godo, Bandit Warlord","Helm of the Host"],["Aggravated Assault","Sword of Feast and Famine"],["Basalt Monolith","Forsaken Monument"],["Sanguine Bond","Enduring Tenacity"],["Witherbloom Apprentice","Chain of Smog"]
+];
+let spellbook=LS.get('mtg.spellbook',{key:'',combos:null,ok:false});
+async function loadSpellbook(names,commanders){
+  const key=[...names].sort().join('|').length+':'+names.length;
+  if(spellbook.key===key&&spellbook.combos)return;
+  try{
+    const r=await fetch('https://backend.commanderspellbook.com/find-my-combos',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({commanders:commanders.map(c=>({card:c})),main:names.filter(n=>!commanders.includes(n)).map(c=>({card:c,quantity:1}))})});
+    if(!r.ok)throw 0;
+    const j=await r.json();const res=j.results||j;
+    const vs=[...(res.included||[]),...(res.includedByChangingCommanders||[]),...(res.almostIncluded||[]),...(res.almostIncludedByAddingColors||[])];
+    const combos=[];
+    for(const v of vs){const u=(v.uses||[]).map(x=>(x.card&&x.card.name)||x.name).filter(Boolean);
+      if(u.length===2&&!(v.requires&&v.requires.length))combos.push(u);}
+    spellbook={key,combos,ok:true};LS.set('mtg.spellbook',spellbook);
+  }catch(e){spellbook={key:'',combos:null,ok:false}}
+}
+function findCombos(nameSet){
+  const list=(spellbook.ok&&spellbook.combos)?spellbook.combos.concat(COMBOS):COMBOS;
+  const seen=new Set(),out=[];
+  for(const [a,b] of list){if(nameSet.has(a)&&nameSet.has(b)){const k=[a,b].sort().join('+');if(!seen.has(k)){seen.add(k);out.push([a,b])}}}
+  return out;
+}
+// Brackets (Commander Brackets beta, Oct 2025 / Feb 2026 rules):
+// 1–2: no Game Changers, no MLD, no chained extra turns, no 2-card combos
+// 3: up to 3 Game Changers, no MLD, no chained extra turns, no early 2-card combos
+// 4: no restrictions. 5 = cEDH (intent, not detectable)
+function bracket(cards){
+  const names=new Set(cards.map(c=>c.n));
+  const gc=cards.filter(c=>c.gc).map(c=>c.n);
+  const mld=cards.filter(isMLD).map(c=>c.n);
+  const xt=cards.filter(isXT).map(c=>c.n);
+  const combos=findCombos(names).map(([a,b])=>{const ca=card(a),cb=card(b);const cmc=(ca?ca.cmc:3)+(cb?cb.cmc:3);return {pair:[a,b],early:cmc<=6}});
+  let b=2;const why=[];
+  if(gc.length){b=3;why.push(`Game Changers: ${gc.length} (${gc.join(', ')})`)}
+  if(gc.length>3){b=4}
+  if(combos.some(c=>!c.early)){b=Math.max(b,3)}
+  if(combos.length)why.push('Combo 2-kartowe: '+combos.map(c=>c.pair.join(' + ')+(c.early?' (wczesne)':' (późne)')).join('; '));
+  if(combos.some(c=>c.early)){b=4}
+  if(mld.length){b=4;why.push('Masowe niszczenie lądów: '+mld.join(', '))}
+  if(xt.length)why.push(`Dodatkowe tury: ${xt.length} (${xt.join(', ')})`);
+  if(xt.length>=3){b=Math.max(b,4);why[why.length-1]+=' — ryzyko łańcuchowania'}
+  return {b,gc,mld,xt,combos,why};
+}
+const bLabel=b=>b<=2?'1–2':String(b);
+const bCls=b=>b<=2?'b12':b===3?'b3':'b4';
+const bPill=b=>`<span class="pill ${bCls(b)}">Bracket ${bLabel(b)}</span>`;
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
+function show(t){
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));
+  if(t==='up')renderUpgrade();
+  if(t==='pre')renderPre();
+  window.scrollTo(0,0);
+}
+
+/* ---------- collection ---------- */
+function parseList(txt){
+  const out={};
+  for(let line of txt.split(/\r?\n/)){
+    line=line.trim();if(!line||/^(\/\/|#)/.test(line)||/^(deck|sideboard|commander|maybeboard)$/i.test(line))continue;
+    let m=line.match(/^(\d+)\s*x?\s+(.+)$/i);let q=1,n=line;
+    if(m){q=+m[1];n=m[2]}
+    n=n.replace(/\s+\([A-Za-z0-9]{2,6}\)\s*[\w-]*.*$/,'').replace(/\s+\*[A-Z]+\*$/,'').replace(/\s+\[.*\]$/,'').trim();
+    if(n)out[n]=(out[n]||0)+q;
+  }
+  return out;
+}
+function addToCol(map){let k=0;for(const [n,q] of Object.entries(map)){collection[n]=(collection[n]||0)+q;k+=q}saveCol();renderCol();state.accepted=[];saveState();return k}
+$('#impBtn').onclick=()=>{const m=parseList($('#imp').value);const k=addToCol(m);$('#imp').value='';toast(`Dodano ${k} kart`)};
+$('#clrBtn').onclick=()=>{if($('#clrBtn').dataset.c){collection={};saveCol();renderCol();$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c}else{$('#clrBtn').dataset.c=1;$('#clrBtn').textContent='Na pewno?';setTimeout(()=>{$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c},3000)}};
+$('#expBtn').onclick=async()=>{const t=Object.entries(collection).map(([n,q])=>q+' '+n).join('\n');try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){$('#imp').value=t;toast('Lista wstawiona w pole importu')}};
+$('#colSearch').oninput=renderCol;
+function renderCol(){
+  const q=$('#colSearch').value.toLowerCase();
+  const e=Object.entries(collection).sort((a,b)=>a[0].localeCompare(b[0]));
+  $('#colCount').textContent=`— ${e.reduce((s,x)=>s+x[1],0)} kart, ${e.length} unikalnych`;
+  const f=e.filter(([n])=>n.toLowerCase().includes(q)).slice(0,200);
+  $('#colList').innerHTML=f.length?f.map(([n,qt])=>`<div class="item"><div class="grow">${esc(n)}</div><span class="mu">×${qt}</span><button class="btn sec" data-del="${esc(n)}" style="padding:4px 10px">−</button></div>`).join('')+(e.length>200&&!q?'<div class="mu">…pokazano 200, użyj wyszukiwania</div>':''):'<div class="mu">Pusto. Zaimportuj listę albo zeskanuj stronę klasera.</div>';
+}
+$('#colList').onclick=e=>{const n=e.target.dataset.del;if(!n)return;collection[n]--;if(collection[n]<=0)delete collection[n];saveCol();renderCol()};
+
+/* ---------- precons ---------- */
+$('#preSearch').oninput=renderPre;$('#preMine').onchange=renderPre;
+function renderPre(){
+  const q=$('#preSearch').value.toLowerCase();
+  const onlyMine=$('#preMine').checked;
+  const f=DECKS.filter(d=>(!onlyMine||mine.has(d.id))&&(!q||(d.name+' '+d.set+' '+d.commanders.join(' ')).toLowerCase().includes(q)))
+    .sort((a,b)=>(mine.has(b.id)-mine.has(a.id)));
+  $('#preInfo').textContent=onlyMine&&!mine.size?'Nie oznaczyłeś jeszcze żadnego preconu — dotknij ☆ przy talii.':`${f.length} z ${DECKS.length} preconów Commandera · moje: ${mine.size}`;
+  $('#preList').innerHTML=f.slice(0,80).map(d=>`<div class="box deck ${state.deck===d.id?'sel':''}" data-id="${esc(d.id)}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><b>${esc(d.name)}</b> <span class="mu">${d.set} · ${d.date.slice(0,7)}</span><div class="mu">${esc(d.commanders.join(' / ')||'—')}</div></div><button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div></div>`).join('');
+}
+$('#preList').onclick=e=>{const st=e.target.closest('[data-star]');if(st){const id=st.dataset.star;mine.has(id)?mine.delete(id):mine.add(id);LS.set('mtg.mine',[...mine]);renderPre();return}
+  const el=e.target.closest('.deck');if(!el)return;state.deck=el.dataset.id;state.accepted=[];saveState();show('up')};
+
+/* ---------- upgrade engine ---------- */
+function deckCards(d){ // expand to slim cards (with qty)
+  return d.cards.map(x=>({...(card(x.name)||{n:x.name,t:'',o:'',ci:'',cmc:0,r:null,gc:false}),qty:x.qty,cmd:d.commanders.includes(x.name)}));
+}
+function suggest(d){
+  const cmdCI=new Set(d.commanders.flatMap(n=>(card(n)||{ci:''}).ci.split('')).filter(Boolean));
+  const base=deckCards(d);
+  const inDeck=new Set(base.map(c=>c.n));
+  const cands=Object.keys(collection).map(card).filter(Boolean)
+    .filter(c=>!inDeck.has(c.n)&&!BASICS.has(c.n)&&c.lg==='legal'&&[...c.ci].every(x=>cmdCI.has(x))&&!/\b(token|emblem)\b/i.test(c.t))
+    .map(c=>({...c,role:role(c)})).filter(c=>c.r).sort((a,b)=>a.r-b.r);
+  const pool=base.filter(c=>!c.cmd&&!BASICS.has(c.n)).map(c=>({...c,role:role(c),rr:c.r||60000}));
+  const used=new Set(),out=[];
+  for(const c of cands){
+    let opts=pool.filter(p=>!used.has(p.n)&&p.role===c.role);
+    // roles with no counterpart in deck (e.g. tutor, protection) may replace the weakest flex card
+    if(!opts.length&&c.role!=='land')opts=pool.filter(p=>!used.has(p.n)&&(p.role==='other'||p.role==='creature'));
+    opts.sort((a,b)=>b.rr-a.rr);
+    const cut=opts[0];
+    if(!cut)continue;
+    if(c.r<cut.rr*0.6&&cut.rr-c.r>300){used.add(cut.n);out.push({inn:c,out:cut,gain:cut.rr-c.r})}
+  }
+  return out;
+}
+function applySwaps(d,swaps){
+  const m=new Map(deckCards(d).map(c=>[c.n,c]));
+  for(const s of swaps){m.delete(s.out.n);m.set(s.inn.n,{...s.inn,qty:1})}
+  return [...m.values()];
+}
+let busy=false;
+async function renderUpgrade(){
+  const d=DECKS.find(x=>x.id===state.deck);
+  if(!d){$('#upHead').innerHTML='<span class="mu">Najpierw wybierz precon w zakładce Precony.</span>';$('#upBody').innerHTML='';return}
+  if(busy)return;busy=true;
+  $('#upHead').innerHTML=`<b>${esc(d.name)}</b> <span class="mu">${d.set}</span><div class="mu">${esc(d.commanders.join(' / '))}</div><div class="prog"><i id="upProg"></i></div><div class="mu" id="upMsg">Pobieram dane kart ze Scryfall…</div>`;
+  $('#upBody').innerHTML='';
+  try{
+    const names=[...d.cards.map(c=>c.name),...Object.keys(collection)];
+    const miss=await fetchCards(names,p=>{const e=$('#upProg');if(e)e.style.width=(p*100)+'%'});
+    $('#upMsg').textContent='Sprawdzam combo (Commander Spellbook)…';
+    await loadSpellbook([...new Set(names.map(n=>(card(n)||{n}).n))],d.commanders);
+    const sugg=suggest(d);
+    const acc=sugg.filter(s=>state.accepted.includes(s.inn.n));
+    const b0=bracket(deckCards(d));
+    const bNow=bracket(applySwaps(d,acc));
+    const roles={};deckCards(d).forEach(c=>{const r=role(c);roles[r]=(roles[r]||0)+c.qty});
+    $('#upHead').innerHTML=`<b>${esc(d.name)}</b> <span class="mu">${d.set}</span><div class="mu">${esc(d.commanders.join(' / '))}</div>
+      <div style="margin-top:8px">Precon: ${bPill(b0.b)} → po zmianach: ${bPill(bNow.b)} <span class="mu">(${acc.length} zamian)</span></div>
+      ${bNow.why.length?`<div class="mu" style="margin-top:4px">${bNow.why.map(esc).join('<br>')}</div>`:''}
+      <div class="mu" style="margin-top:6px">${Object.entries(roles).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${ROLE_PL[r]} ${n}`).join(' · ')}</div>
+      <div class="mu" style="margin-top:4px">${spellbook.ok?'Combo: Commander Spellbook + lista wbudowana':'<span class="warn">Combo: tylko lista wbudowana (Spellbook niedostępny)</span>'}${miss.length?` · <span class="warn">Nie znaleziono: ${miss.length}</span>`:''}</div>
+      <div class="row" style="margin-top:8px"><button class="btn sec" id="cpDeck">Kopiuj listę talii</button><button class="btn sec" id="rstAcc">Cofnij wszystkie</button></div>`;
+    $('#cpDeck').onclick=async()=>{const t=applySwaps(d,acc).map(c=>(c.qty||1)+' '+c.n).join('\n');try{await navigator.clipboard.writeText(t);toast('Lista skopiowana')}catch(e){toast('Kopiowanie zablokowane')}};
+    $('#rstAcc').onclick=()=>{state.accepted=[];saveState();busy=false;renderUpgrade()};
+    if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
+    if(!sugg.length){$('#upBody').innerHTML='<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.</div>';return}
+    // per-suggestion bracket effect against current accepted state
+    const html=sugg.map(s=>{
+      const isAcc=state.accepted.includes(s.inn.n);
+      const others=acc.filter(a=>a.inn.n!==s.inn.n);
+      const bWith=bracket(applySwaps(d,[...others,s])).b, bWithout=bracket(applySwaps(d,others)).b;
+      const up=bWith>bWithout;
+      const tags=[];if(s.inn.gc)tags.push('<span class="pill b3">Game Changer</span>');if(isMLD(s.inn))tags.push('<span class="pill b4">MLD</span>');if(isXT(s.inn))tags.push('<span class="pill">Extra turn</span>');
+      return `<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy">`:'<div></div>'}
+        <div><div class="in">＋ ${esc(s.inn.n)} <span class="mu">#${s.inn.r}</span></div>
+        <div class="out">－ ${esc(s.out.n)} <span class="mu">#${s.out.r||'—'}</span></div>
+        <div class="mu">${ROLE_PL[s.inn.role]}</div>
+        <div>${up?`<span class="pill ${bCls(bWith)}">↑ Bracket ${bLabel(bWith)}</span>`:'<span class="pill">bracket bez zmian</span>'}${tags.join('')}</div>
+        <label><input type="checkbox" data-acc="${esc(s.inn.n)}" ${isAcc?'checked':''}> Akceptuj</label></div></div>`}).join('');
+    $('#upBody').innerHTML=`<div class="box"><h3>Propozycje (${sugg.length})</h3><div class="mu">＋ z Twojej kolekcji, － z preconu. #liczba = ranking popularności EDHREC (niżej = częściej grana).</div>${html}</div>`;
+  }catch(e){$('#upMsg').innerHTML=`<span class="warn">${esc(e.message||e)} — sprawdź internet.</span>`}
+  finally{busy=false}
+}
+$('#upBody').onchange=e=>{const n=e.target.dataset.acc;if(!n)return;
+  state.accepted=e.target.checked?[...new Set([...state.accepted,n])]:state.accepted.filter(x=>x!==n);saveState();renderUpgrade()};
+
+/* ---------- scanner (OCR v0) ---------- */
+let scanRes=[];
+let tessP=null;
+function loadTess(){return tessP||(tessP=new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';s.onload=ok;s.onerror=()=>{tessP=null;no(new Error('Nie udało się wczytać OCR'))};document.head.appendChild(s)}))}
+$('#photo').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const [cols,rows]=$('#gridSel').value.split('x').map(Number);
+  const msg=$('#scanMsg'),prog=$('#scanProg');scanRes=[];$('#scanAdd').disabled=true;
+  $('#scanGrid').style.gridTemplateColumns=`repeat(${cols},1fr)`;
+  try{
+    msg.textContent='Wczytuję zdjęcie…';
+    const img=await createImageBitmap(f);
+    const cw=img.width/cols,ch=img.height/rows;
+    $('#scanGrid').innerHTML='';
+    msg.textContent='Ładuję OCR (pierwszy raz trwa dłużej)…';
+    await loadTess();
+    const worker=await Tesseract.createWorker('eng');
+    await worker.setParameters({tessedit_pageseg_mode:'7'});
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const i=r*cols+c;
+      // title bar: ~4–11% of card height, skip left border and mana cost on right
+      const x=c*cw+cw*0.06,y=r*ch+ch*0.045,w=cw*0.66,h=ch*0.07;
+      const cv=document.createElement('canvas');cv.width=Math.round(w*2);cv.height=Math.round(h*2);
+      const g=cv.getContext('2d');g.filter='grayscale(1) contrast(1.6)';g.drawImage(img,x,y,w,h,0,0,cv.width,cv.height);
+      const thumb=document.createElement('canvas');thumb.width=Math.round(cw/3);thumb.height=Math.round(ch/3);thumb.getContext('2d').drawImage(img,c*cw,r*ch,cw,ch,0,0,thumb.width,thumb.height);
+      const cell=document.createElement('div');cell.className='cell';cell.append(thumb);
+      const inp=document.createElement('input');inp.placeholder='…';cell.append(inp);$('#scanGrid').append(cell);
+      const {data}=await worker.recognize(cv);
+      const raw=data.text.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim();
+      let name='';
+      if(raw.length>=3){try{const rr=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(raw));if(rr.ok){const cd=put(await rr.json());name=cd.n}}catch(_){}
+        if(!name){try{const rr=await fetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(raw.slice(0,20)));const j=await rr.json();name=(j.data||[])[0]||''}catch(_){}}}
+      inp.value=name;inp.title='OCR: '+raw;scanRes[i]=inp;
+      prog.style.width=((i+1)/(rows*cols)*100)+'%';msg.textContent=`Rozpoznano ${i+1}/${rows*cols}`;
+      await sleep(80);
+    }
+    await worker.terminate();LS.set('mtg.cards',cache);
+    msg.textContent='Sprawdź nazwy (popraw ręcznie, puste pole = pomiń) i dodaj do kolekcji.';
+    $('#scanAdd').disabled=false;
+  }catch(err){msg.innerHTML=`<span class="warn">${esc(err.message||err)}</span>`}
+};
+$('#scanAdd').onclick=()=>{const m={};scanRes.forEach(i=>{const v=i&&i.value.trim();if(v)m[v]=(m[v]||0)+1});const k=addToCol(m);toast(`Dodano ${k} kart`);$('#scanGrid').innerHTML='';$('#scanAdd').disabled=true;$('#scanMsg').textContent='';$('#scanProg').style.width=0};
+
+/* ---------- init ---------- */
+renderCol();
+if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+</script>
+</body>
+</html>
