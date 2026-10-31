@@ -266,7 +266,12 @@ const bPill=b=>`<span class="pill ${bCls(b)}">Bracket ${bLabel(b)}</span>`;
 
 /* ---------- tabs ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
-function show(t){
+// Navigation history so Android "back" steps back instead of closing the app
+let curTab='col';
+function nav(st){history.pushState(st,'')}
+function show(t,fromPop){
+  if(!fromPop&&t!==curTab)nav({t,v:state.view});
+  curTab=t;
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));
   if(t==='up')renderUpgrade();
@@ -353,6 +358,7 @@ function cardHTML(c){
 function zoom(cards,title){
   $('#zoomIn').innerHTML=(title?`<h3>${title}</h3>`:'')+`<div class="zr">${cards.map(cardHTML).join('')}</div><div class="mu" style="text-align:center;margin-top:10px">Dotknij, aby zamknąć</div>`;
   $('#zoom').style.display='block';
+  nav({t:curTab,v:state.view,zoom:1});
 }
 async function renderUpgrade(){
   const d=DECKS.find(x=>x.id===state.deck);
@@ -401,7 +407,7 @@ function draw(d){
     const t=b.dataset.mode==='keep'?b0.b:Math.max(b0.b,+b.dataset.mode);const keep=[];
     for(const s of acc){if(bracket(applySwaps(d,[...keep,s])).b<=t)keep.push(s)}
     state.accepted=keep.map(s=>s.inn.n);saveState();draw(d)});
-  $('#upHead').querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;saveState();draw(d)});
+  $('#upHead').querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if(b.dataset.view!==state.view)nav({t:'up',v:b.dataset.view});state.view=b.dataset.view;saveState();draw(d)});
   if(view==='deck'){drawDeck(d,acc);return}
   if(view==='buy'){drawBuy(d,b0,target,mode);return}
   if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
@@ -544,7 +550,14 @@ $('#upBody').onclick=e=>{
   const z=e.target.closest('[data-zoom]');
   if(z){zoom([card(z.dataset.zoom)||{n:z.dataset.zoom}])}
 };
-$('#zoom').onclick=()=>$('#zoom').style.display='none';
+$('#zoom').onclick=()=>history.back();
+window.addEventListener('popstate',e=>{
+  const st=e.state||{t:'col'};
+  if($('#zoom').style.display==='block'){$('#zoom').style.display='none';if(!st.zoom)return}
+  if(st.zoom){history.back();return}
+  if(st.v&&st.v!==state.view&&st.t==='up'){state.view=st.v;saveState();if(curTab==='up'){renderUpgrade();return}}
+  show(st.t||'col',true);
+});
 $('#upBody').onchange=e=>{const n=e.target.dataset.acc;if(!n)return;
   state.accepted=e.target.checked?[...new Set([...state.accepted,n])]:state.accepted.filter(x=>x!==n);saveState();renderUpgrade()};
 
@@ -592,6 +605,7 @@ $('#photo').onchange=async e=>{
 $('#scanAdd').onclick=()=>{const m={};scanRes.forEach(i=>{const v=i&&i.value.trim();if(v)m[v]=(m[v]||0)+1});const k=addToCol(m);toast(`Dodano ${k} kart`);$('#scanGrid').innerHTML='';$('#scanAdd').disabled=true;$('#scanMsg').textContent='';$('#scanProg').style.width=0};
 
 /* ---------- init ---------- */
+history.replaceState({t:'col',v:state.view},'');
 renderCol();
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
