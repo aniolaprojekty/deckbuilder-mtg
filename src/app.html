@@ -151,12 +151,13 @@ function slim(c){
   const o=c.oracle_text!=null?c.oracle_text:f.map(x=>x.oracle_text||'').join('\n');
   const img=(c.image_uris||(f[0]&&f[0].image_uris)||{}).small||'';
   return {n:c.name,ci:(c.color_identity||[]).join(''),t:c.type_line||f.map(x=>x.type_line).join(' // '),o,cmc:c.cmc||0,
-          r:c.edhrec_rank||null,gc:!!c.game_changer,lg:(c.legalities||{}).commander||'legal',img};
+          r:c.edhrec_rank||null,gc:!!c.game_changer,lg:(c.legalities||{}).commander||'legal',img,
+          p:(c.prices&&(c.prices.eur!=null?+c.prices.eur:c.prices.eur_foil!=null?+c.prices.eur_foil:c.prices.usd!=null?+c.prices.usd*0.92:null))};
 }
 function put(c){const s=slim(c);cache[s.n.toLowerCase()]=s;const front=s.n.split(' // ')[0].toLowerCase();if(!cache[front])cache[front]=s;return s}
 const card=n=>cache[n.toLowerCase()]||cache[n.split(' // ')[0].toLowerCase()];
-async function fetchCards(names,onProg){
-  const need=[...new Set(names)].filter(n=>!card(n));
+async function fetchCards(names,onProg,needPrice){
+  const need=[...new Set(names)].filter(n=>!card(n)||(needPrice&&card(n).p===undefined));
   const missing=[];
   for(let i=0;i<need.length;i+=75){
     const batch=need.slice(i,i+75);
@@ -388,7 +389,7 @@ function draw(d){
     <div class="mu" style="margin-top:4px">${spellbook.ok?'Combo: Commander Spellbook + lista wbudowana':'<span class="warn">Combo: tylko lista wbudowana (Spellbook niedostępny)</span>'}${miss.length?` · <span class="warn">Nie znaleziono: ${miss.length}</span>`:''}</div>
     <div class="seg" style="margin-top:10px">${modes.map(([m,t])=>`<button data-mode="${m}" class="${mode===m?'on':''}">${t}</button>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn" id="autoAcc">Zastosuj najlepsze (cel: B${bLabel(target)})</button><button class="btn sec" id="rstAcc">Cofnij wszystkie</button><button class="btn sec" id="cpDeck">Kopiuj listę</button></div>
-    <div class="seg" style="margin-top:10px"><button data-view="sug" class="${view==='sug'?'on':''}">Propozycje</button><button data-view="deck" class="${view==='deck'?'on':''}">Lista talii</button></div>`;
+    <div class="seg" style="margin-top:10px"><button data-view="sug" class="${view==='sug'?'on':''}">Z kolekcji</button><button data-view="buy" class="${view==='buy'?'on':''}">Do kupienia</button><button data-view="deck" class="${view==='deck'?'on':''}">Lista talii</button></div>`;
   $('#cpDeck').onclick=async()=>{const t=applySwaps(d,acc).map(c=>(c.qty||1)+' '+c.n).join('\n');try{await navigator.clipboard.writeText(t);toast('Lista skopiowana')}catch(e){toast('Kopiowanie zablokowane')}};
   $('#rstAcc').onclick=()=>{state.accepted=[];saveState();draw(d)};
   $('#autoAcc').onclick=()=>{ // greedy: best gains first, keep bracket <= target
@@ -402,6 +403,7 @@ function draw(d){
     state.accepted=keep.map(s=>s.inn.n);saveState();draw(d)});
   $('#upHead').querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;saveState();draw(d)});
   if(view==='deck'){drawDeck(d,acc);return}
+  if(view==='buy'){drawBuy(d,b0,target,mode);return}
   if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
   if(!sugg.length){$('#upBody').innerHTML='<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.</div>';return}
   let hidden=0;
@@ -440,7 +442,103 @@ function drawDeck(d,acc){
         <div class="grow"><div style="${st==='out'?'text-decoration:line-through':''}">${st==='in'?'＋ ':st==='out'?'－ ':''}${esc(c.n)}</div><div class="mu">${esc((c.t||'').split(' — ')[0])} · CMC ${c.cmc}</div></div>
         ${c.qty>1?`<span class="mu">×${c.qty}</span>`:''}${c.gc?'<span class="pill b3">GC</span>':''}</div>`}).join('')}</div>`}).join('');
 }
+
+/* ---------- buy list (EDHREC per commander, fallback Scryfall) ---------- */
+const slugify=n=>n.split(' // ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\s-]/g,'').trim().replace(/\s+/g,'-');
+const BUY={};            // deckId -> {src, score:Map(name->score), names:[]}
+async function loadBuyPool(d){
+  if(BUY[d.id])return BUY[d.id];
+  const ci=[...new Set(d.commanders.flatMap(n=>(card(n)||{ci:''}).ci.split('')).filter(Boolean))].join('')||'c';
+  let pool=null;
+  for(const cmd of d.commanders.length?d.commanders:[]){
+    try{
+      const r=await fetch('https://json.edhrec.com/pages/commanders/'+slugify(cmd)+'.json');
+      if(!r.ok)continue;
+      const j=await r.json();const score=new Map();
+      (function walk(o){if(!o||typeof o!=='object')return;
+        if(Array.isArray(o.cardviews))for(const v of o.cardviews){if(!v||!v.name)continue;
+          const inc=v.potential_decks?v.num_decks/v.potential_decks:(v.inclusion||0)/100;
+          const sc=inc+0.5*Math.max(0,v.synergy||0);if(!score.has(v.name)||score.get(v.name)<sc)score.set(v.name,sc)}
+        for(const k in o)walk(o[k])})(j);
+      if(score.size>5){pool={src:'EDHREC ('+cmd+')',score};break}
+    }catch(e){}
+  }
+  if(!pool){ // fallback: most played Commander cards in color identity
+    const score=new Map();let url=SCRY+'/cards/search?order=edhrec&q='+encodeURIComponent(`id<=${ci} f:commander -t:basic`);
+    for(let page=0;page<3&&url;page++){
+      const r=await fetch(url);if(!r.ok)break;const j=await r.json();
+      for(const c of j.data||[]){const x=put(c);score.set(x.n,Math.max(0,1-(x.r||40000)/40000))}
+      url=j.has_more?j.next_page:null;await sleep(110);
+    }
+    LS.set('mtg.cards',cache);pool={src:'Scryfall (popularność w Commanderze)',score,fallback:true};
+  }
+  await fetchCards([...pool.score.keys(),...d.cards.map(c=>c.name)],null,true);
+  BUY[d.id]=pool;return pool;
+}
+function buySuggest(d,pool){
+  const cmdCI=new Set(d.commanders.flatMap(n=>(card(n)||{ci:''}).ci.split('')).filter(Boolean));
+  const sc=c=>pool.fallback?Math.max(0,1-(c.r||40000)/40000):(pool.score.get(c.n)||0);
+  const base=deckCards(d),inDeck=new Set(base.map(c=>c.n));
+  const cands=[...pool.score.keys()].map(card).filter(Boolean)
+    .filter(c=>!inDeck.has(c.n)&&!BASICS.has(c.n)&&c.lg==='legal'&&[...c.ci].every(x=>cmdCI.has(x)))
+    .map(c=>({...c,role:role(c),s:sc(c)})).sort((a,b)=>b.s-a.s);
+  const cut=base.filter(c=>!c.cmd&&!BASICS.has(c.n)).map(c=>({...c,role:role(c),s:sc(c)}));
+  const used=new Set(),out=[];
+  for(const c of cands){
+    let opts=cut.filter(p=>!used.has(p.n)&&p.role===c.role);
+    if(!opts.length&&c.role!=='land')opts=cut.filter(p=>!used.has(p.n)&&(p.role==='other'||p.role==='creature'));
+    opts.sort((a,b)=>a.s-b.s);const o=opts[0];
+    if(o&&c.s-o.s>=0.08){used.add(o.n);out.push({inn:c,out:o,gain:c.s-o.s,own:!!collection[c.n]})}
+  }
+  return out.sort((a,b)=>b.gain-a.gain);
+}
+let BUYSUG=[];
+async function drawBuy(d,b0,target,mode){
+  const body=$('#upBody');
+  if(!BUY[d.id]){body.innerHTML='<div class="box mu">Pobieram najlepsze karty dla dowódcy (EDHREC)…</div>';
+    try{await loadBuyPool(d)}catch(e){body.innerHTML=`<div class="box warn">${esc(e.message||e)} — sprawdź internet.</div>`;return}
+    if(state.view!=='buy'||state.deck!==d.id)return}
+  const pool=BUY[d.id];
+  const per=+(state.maxPer||0),budget=+(state.budget||0);
+  const all=buySuggest(d,pool);
+  // greedy: best gain first, within bracket target and budget
+  const pick=[],skip={br:0,price:0};let total=0;
+  for(const s of all){
+    const cost=s.own?0:(s.inn.p||0);
+    if(!s.own&&per&&(s.inn.p==null||s.inn.p>per)){skip.price++;continue}
+    if(!s.own&&budget&&total+cost>budget){skip.price++;continue}
+    if(bracket(applySwaps(d,[...pick,s])).b>target){skip.br++;continue}
+    pick.push(s);total+=cost;
+  }
+  const n=+(state.buyN||15);const shown=pick.slice(0,n);BUYSUG=shown;
+  const sum=shown.reduce((t,s)=>t+(s.own?0:(s.inn.p||0)),0);
+  const bAfter=bracket(applySwaps(d,shown)).b;
+  const toBuy=shown.filter(s=>!s.own);
+  body.innerHTML=`<div class="box"><h3>${mode==='keep'?'Lista zakupów — bracket bez zmian':'Lista zakupów — do Bracketu '+bLabel(target)}</h3>
+    <div class="mu">Źródło: ${esc(pool.src)}. Każda karta zastępuje najsłabszą kartę preconu w tej samej roli.</div>
+    <div class="row" style="margin-top:8px;flex-wrap:nowrap">
+      <label class="mu" style="flex:1">Ile zmian<select id="buyN">${[5,10,15,20,30,50].map(x=>`<option ${x===n?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="mu" style="flex:1">Max €/karta<input id="maxPer" inputmode="decimal" value="${per||''}" placeholder="bez limitu"></label>
+      <label class="mu" style="flex:1">Budżet €<input id="budget" inputmode="decimal" value="${budget||''}" placeholder="bez limitu"></label></div>
+    <div style="margin-top:8px">Po zmianach: ${bPill(bAfter)} · do kupienia <b>${toBuy.length}</b> kart · <b>${sum.toFixed(2)} €</b>${shown.length-toBuy.length?` · ${shown.length-toBuy.length} masz w kolekcji`:''}</div>
+    ${skip.br||skip.price?`<div class="mu">Pominięto: ${skip.br?skip.br+' przekraczających bracket':''}${skip.br&&skip.price?', ':''}${skip.price?skip.price+' poza budżetem':''}</div>`:''}
+    <div class="row" style="margin-top:8px"><button class="btn" id="cpBuy">Kopiuj listę zakupów</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
+    <div class="mu" style="margin-top:4px">Listę wkleisz w Cardmarket → Wants → Import.</div>
+    ${shown.map((s,i)=>`<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy" data-bcmp="${i}">`:`<div data-bcmp="${i}" class="noimg">🔍</div>`}
+      <div><div class="in" data-bcmp="${i}">＋ ${esc(s.inn.n)} ${s.own?'<span class="pill b12">masz ✓</span>':`<span class="mu">${s.inn.p!=null?s.inn.p.toFixed(2)+' €':'brak ceny'}</span>`}</div>
+      <div class="out" data-bcmp="${i}">－ ${esc(s.out.n)}</div>
+      <div class="mu">${ROLE_PL[s.inn.role]} · ocena ${(s.inn.s*100).toFixed(0)} vs ${(s.out.s*100).toFixed(0)}</div>
+      <div>${s.inn.gc?'<span class="pill b3">Game Changer</span>':''}${isMLD(s.inn)?'<span class="pill b4">MLD</span>':''}${isXT(s.inn)?'<span class="pill">Extra turn</span>':''}</div>
+      ${s.own?'':`<a class="mu" href="https://www.cardmarket.com/pl/Magic/Products/Search?searchString=${encodeURIComponent(s.inn.n.split(' // ')[0])}" target="_blank" rel="noopener">Cardmarket ↗</a>`}</div></div>`).join('')||'<div class="mu" style="margin-top:8px">Brak ulepszeń mieszczących się w celu i budżecie.</div>'}</div>`;
+  const upd=()=>{state.buyN=$('#buyN').value;state.maxPer=parseFloat(($('#maxPer').value||'').replace(',','.'))||0;state.budget=parseFloat(($('#budget').value||'').replace(',','.'))||0;saveState();drawBuy(d,b0,target,mode)};
+  $('#buyN').onchange=upd;$('#maxPer').onchange=upd;$('#budget').onchange=upd;
+  const copy=async t=>{try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){toast('Kopiowanie zablokowane')}};
+  $('#cpBuy').onclick=()=>copy(toBuy.map(s=>'1 '+s.inn.n).join('\n'));
+  $('#cpBuyDeck').onclick=()=>copy(applySwaps(d,shown).map(c=>(c.qty||1)+' '+c.n).join('\n'));
+}
 $('#upBody').onclick=e=>{
+  const bc=e.target.closest('[data-bcmp]');
+  if(bc){const s=BUYSUG[+bc.dataset.bcmp];zoom([s.inn,card(s.out.n)||s.out],'＋ kupujesz / － wychodzi');return}
   const cmp=e.target.closest('[data-cmp]');
   if(cmp){const s=SUG[+cmp.dataset.cmp];zoom([s.inn,card(s.out.n)||s.out],'＋ wchodzi / － wychodzi');return}
   const z=e.target.closest('[data-zoom]');

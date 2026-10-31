@@ -1,1 +1,10 @@
-{ "appId": "pl.aniolaprojekty.deckbuilder", "appName": "Deckbuilder MTG", "webDir": "www" }
+{
+  "appId": "pl.aniolaprojekty.deckbuilder",
+  "appName": "Deckbuilder MTG",
+  "webDir": "www",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
