@@ -1,7 +1,7 @@
 name: Deploy web app
+# Manual only until GitHub Pages is enabled (Settings → Pages → Source: GitHub Actions).
+# Then switch back to: on: { push: { branches: [main] }, workflow_dispatch: }
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
