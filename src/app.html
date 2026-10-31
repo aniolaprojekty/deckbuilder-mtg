@@ -51,6 +51,17 @@ textarea{min-height:120px;font-size:13px}
 .prog i{display:block;height:100%;background:var(--ac);width:0}
 #toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:8px;display:none;z-index:9}
 .warn{color:var(--b3)}
+.seg{display:flex;background:#0f1115;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;background:none;border:0;color:var(--mu);padding:8px 4px;font:inherit;font-size:13px}
+.seg button.on{background:var(--ac);color:#111;font-weight:600}
+#zoom{position:fixed;inset:0;background:#000d;z-index:20;display:none;overflow:auto;padding:16px}
+.zr{display:flex;gap:10px}
+.zc{flex:1;min-width:0}
+.zc img{width:100%;border-radius:4.5%;display:block;margin-bottom:6px}
+.ot{font-size:13px;margin-top:6px;background:#0f1115;border-radius:6px;padding:8px}
+.noimg{width:46px;height:64px;border-radius:4px;background:#2c303b;display:flex;align-items:center;justify-content:center}
+.dc.in{background:#1d3324}.dc.out{opacity:.55}
+.sw img,.sw .in,.sw .out{cursor:pointer}
 </style>
 </head>
 <body>
@@ -107,6 +118,7 @@ textarea{min-height:120px;font-size:13px}
   <button data-t="up"><b>⬆️</b>Upgrade</button>
 </nav>
 <div id="toast"></div>
+<div id="zoom"><div id="zoomIn"></div></div>
 
 <script type="application/json" id="precons">/*PRECONS*/</script>
 <script>
@@ -128,7 +140,7 @@ const DECKS=P.decks.map(d=>({id:d.id,name:d.n,set:d.s,date:d.d,commanders:d.c.ma
 /* ---------- state ---------- */
 let collection=LS.get('mtg.collection',{});           // name -> qty
 let cache=LS.get('mtg.cards',{});                     // lower name -> slim card
-let state=LS.get('mtg.state',{deck:null,accepted:[]});
+let state=LS.get('mtg.state',{deck:null,accepted:[],mode:'keep',view:'sug'});
 let mine=new Set(LS.get('mtg.mine',[]));
 const saveState=()=>LS.set('mtg.state',state);
 const saveCol=()=>LS.set('mtg.collection',collection);
@@ -298,7 +310,7 @@ function renderPre(){
   $('#preList').innerHTML=f.slice(0,80).map(d=>`<div class="box deck ${state.deck===d.id?'sel':''}" data-id="${esc(d.id)}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><b>${esc(d.name)}</b> <span class="mu">${d.set} · ${d.date.slice(0,7)}</span><div class="mu">${esc(d.commanders.join(' / ')||'—')}</div></div><button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div></div>`).join('');
 }
 $('#preList').onclick=e=>{const st=e.target.closest('[data-star]');if(st){const id=st.dataset.star;mine.has(id)?mine.delete(id):mine.add(id);LS.set('mtg.mine',[...mine]);renderPre();return}
-  const el=e.target.closest('.deck');if(!el)return;state.deck=el.dataset.id;state.accepted=[];saveState();show('up')};
+  const el=e.target.closest('.deck');if(!el)return;state.deck=el.dataset.id;state.accepted=[];state.mode='keep';state.view='sug';saveState();show('up')};
 
 /* ---------- upgrade engine ---------- */
 function deckCards(d){ // expand to slim cards (with qty)
@@ -329,50 +341,112 @@ function applySwaps(d,swaps){
   for(const s of swaps){m.delete(s.out.n);m.set(s.inn.n,{...s.inn,qty:1})}
   return [...m.values()];
 }
-let busy=false;
+let busy=false,loaded=null,miss=[];
+const bigImg=c=>c&&c.img?c.img.replace('/small/','/normal/'):'';
+function cardHTML(c){
+  if(!c)return '';
+  const tags=[];if(c.gc)tags.push('<span class="pill b3">Game Changer</span>');if(isMLD(c))tags.push('<span class="pill b4">MLD</span>');if(isXT(c))tags.push('<span class="pill">Extra turn</span>');
+  return `<div class="zc">${c.img?`<img src="${esc(bigImg(c))}" alt="${esc(c.n)}">`:''}<b>${esc(c.n)}</b><div class="mu">${esc(c.t||'')}</div>
+    <div class="mu">${ROLE_PL[role(c)]} · EDHREC #${c.r||'—'}</div><div>${tags.join('')}</div>${c.o?`<div class="ot">${esc(c.o).replace(/\n/g,'<br>')}</div>`:''}</div>`;
+}
+function zoom(cards,title){
+  $('#zoomIn').innerHTML=(title?`<h3>${title}</h3>`:'')+`<div class="zr">${cards.map(cardHTML).join('')}</div><div class="mu" style="text-align:center;margin-top:10px">Dotknij, aby zamknąć</div>`;
+  $('#zoom').style.display='block';
+}
 async function renderUpgrade(){
   const d=DECKS.find(x=>x.id===state.deck);
   if(!d){$('#upHead').innerHTML='<span class="mu">Najpierw wybierz precon w zakładce Precony.</span>';$('#upBody').innerHTML='';return}
+  const key=d.id+'|'+Object.keys(collection).length;
+  if(loaded===key){draw(d);return}
   if(busy)return;busy=true;
   $('#upHead').innerHTML=`<b>${esc(d.name)}</b> <span class="mu">${d.set}</span><div class="mu">${esc(d.commanders.join(' / '))}</div><div class="prog"><i id="upProg"></i></div><div class="mu" id="upMsg">Pobieram dane kart ze Scryfall…</div>`;
   $('#upBody').innerHTML='';
   try{
     const names=[...d.cards.map(c=>c.name),...Object.keys(collection)];
-    const miss=await fetchCards(names,p=>{const e=$('#upProg');if(e)e.style.width=(p*100)+'%'});
+    miss=await fetchCards(names,p=>{const e=$('#upProg');if(e)e.style.width=(p*100)+'%'});
     $('#upMsg').textContent='Sprawdzam combo (Commander Spellbook)…';
     await loadSpellbook([...new Set(names.map(n=>(card(n)||{n}).n))],d.commanders);
-    const sugg=suggest(d);
-    const acc=sugg.filter(s=>state.accepted.includes(s.inn.n));
-    const b0=bracket(deckCards(d));
-    const bNow=bracket(applySwaps(d,acc));
-    const roles={};deckCards(d).forEach(c=>{const r=role(c);roles[r]=(roles[r]||0)+c.qty});
-    $('#upHead').innerHTML=`<b>${esc(d.name)}</b> <span class="mu">${d.set}</span><div class="mu">${esc(d.commanders.join(' / '))}</div>
-      <div style="margin-top:8px">Precon: ${bPill(b0.b)} → po zmianach: ${bPill(bNow.b)} <span class="mu">(${acc.length} zamian)</span></div>
-      ${bNow.why.length?`<div class="mu" style="margin-top:4px">${bNow.why.map(esc).join('<br>')}</div>`:''}
-      <div class="mu" style="margin-top:6px">${Object.entries(roles).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${ROLE_PL[r]} ${n}`).join(' · ')}</div>
-      <div class="mu" style="margin-top:4px">${spellbook.ok?'Combo: Commander Spellbook + lista wbudowana':'<span class="warn">Combo: tylko lista wbudowana (Spellbook niedostępny)</span>'}${miss.length?` · <span class="warn">Nie znaleziono: ${miss.length}</span>`:''}</div>
-      <div class="row" style="margin-top:8px"><button class="btn sec" id="cpDeck">Kopiuj listę talii</button><button class="btn sec" id="rstAcc">Cofnij wszystkie</button></div>`;
-    $('#cpDeck').onclick=async()=>{const t=applySwaps(d,acc).map(c=>(c.qty||1)+' '+c.n).join('\n');try{await navigator.clipboard.writeText(t);toast('Lista skopiowana')}catch(e){toast('Kopiowanie zablokowane')}};
-    $('#rstAcc').onclick=()=>{state.accepted=[];saveState();busy=false;renderUpgrade()};
-    if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
-    if(!sugg.length){$('#upBody').innerHTML='<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.</div>';return}
-    // per-suggestion bracket effect against current accepted state
-    const html=sugg.map(s=>{
-      const isAcc=state.accepted.includes(s.inn.n);
-      const others=acc.filter(a=>a.inn.n!==s.inn.n);
-      const bWith=bracket(applySwaps(d,[...others,s])).b, bWithout=bracket(applySwaps(d,others)).b;
-      const up=bWith>bWithout;
-      const tags=[];if(s.inn.gc)tags.push('<span class="pill b3">Game Changer</span>');if(isMLD(s.inn))tags.push('<span class="pill b4">MLD</span>');if(isXT(s.inn))tags.push('<span class="pill">Extra turn</span>');
-      return `<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy">`:'<div></div>'}
-        <div><div class="in">＋ ${esc(s.inn.n)} <span class="mu">#${s.inn.r}</span></div>
-        <div class="out">－ ${esc(s.out.n)} <span class="mu">#${s.out.r||'—'}</span></div>
-        <div class="mu">${ROLE_PL[s.inn.role]}</div>
-        <div>${up?`<span class="pill ${bCls(bWith)}">↑ Bracket ${bLabel(bWith)}</span>`:'<span class="pill">bracket bez zmian</span>'}${tags.join('')}</div>
-        <label><input type="checkbox" data-acc="${esc(s.inn.n)}" ${isAcc?'checked':''}> Akceptuj</label></div></div>`}).join('');
-    $('#upBody').innerHTML=`<div class="box"><h3>Propozycje (${sugg.length})</h3><div class="mu">＋ z Twojej kolekcji, － z preconu. #liczba = ranking popularności EDHREC (niżej = częściej grana).</div>${html}</div>`;
+    loaded=key;draw(d);
   }catch(e){$('#upMsg').innerHTML=`<span class="warn">${esc(e.message||e)} — sprawdź internet.</span>`}
   finally{busy=false}
 }
+let SUG=[];
+function draw(d){
+  const sugg=suggest(d).sort((a,b)=>b.gain-a.gain);SUG=sugg;
+  const acc=sugg.filter(s=>state.accepted.includes(s.inn.n));
+  const b0=bracket(deckCards(d));
+  const bNow=bracket(applySwaps(d,acc));
+  const mode=state.mode||'keep';
+  const target=mode==='keep'?b0.b:Math.max(b0.b,+mode);
+  const view=state.view||'sug';
+  const roles={};deckCards(d).forEach(c=>{const r=role(c);roles[r]=(roles[r]||0)+c.qty});
+  const modes=[['keep',`Zachowaj bracket ${bLabel(b0.b)}`]].concat([3,4].filter(b=>b>b0.b).map(b=>[String(b),`Podnieś do ${b}`]));
+  $('#upHead').innerHTML=`<b>${esc(d.name)}</b> <span class="mu">${d.set}</span><div class="mu">${esc(d.commanders.join(' / '))}</div>
+    <div style="margin-top:8px">Precon: ${bPill(b0.b)} → po zmianach: ${bPill(bNow.b)} <span class="mu">(${acc.length} zamian)</span></div>
+    ${bNow.why.length?`<div class="mu" style="margin-top:4px">${bNow.why.map(esc).join('<br>')}</div>`:''}
+    <div class="mu" style="margin-top:6px">${Object.entries(roles).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${ROLE_PL[r]} ${n}`).join(' · ')}</div>
+    <div class="mu" style="margin-top:4px">${spellbook.ok?'Combo: Commander Spellbook + lista wbudowana':'<span class="warn">Combo: tylko lista wbudowana (Spellbook niedostępny)</span>'}${miss.length?` · <span class="warn">Nie znaleziono: ${miss.length}</span>`:''}</div>
+    <div class="seg" style="margin-top:10px">${modes.map(([m,t])=>`<button data-mode="${m}" class="${mode===m?'on':''}">${t}</button>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="autoAcc">Zastosuj najlepsze (cel: B${bLabel(target)})</button><button class="btn sec" id="rstAcc">Cofnij wszystkie</button><button class="btn sec" id="cpDeck">Kopiuj listę</button></div>
+    <div class="seg" style="margin-top:10px"><button data-view="sug" class="${view==='sug'?'on':''}">Propozycje</button><button data-view="deck" class="${view==='deck'?'on':''}">Lista talii</button></div>`;
+  $('#cpDeck').onclick=async()=>{const t=applySwaps(d,acc).map(c=>(c.qty||1)+' '+c.n).join('\n');try{await navigator.clipboard.writeText(t);toast('Lista skopiowana')}catch(e){toast('Kopiowanie zablokowane')}};
+  $('#rstAcc').onclick=()=>{state.accepted=[];saveState();draw(d)};
+  $('#autoAcc').onclick=()=>{ // greedy: best gains first, keep bracket <= target
+    const pick=[];
+    for(const s of sugg){if(bracket(applySwaps(d,[...pick,s])).b<=target)pick.push(s)}
+    state.accepted=pick.map(s=>s.inn.n);saveState();draw(d);toast(`Wybrano ${pick.length} zamian`)};
+  $('#upHead').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;
+    // drop accepted swaps that exceed the new target
+    const t=b.dataset.mode==='keep'?b0.b:Math.max(b0.b,+b.dataset.mode);const keep=[];
+    for(const s of acc){if(bracket(applySwaps(d,[...keep,s])).b<=t)keep.push(s)}
+    state.accepted=keep.map(s=>s.inn.n);saveState();draw(d)});
+  $('#upHead').querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;saveState();draw(d)});
+  if(view==='deck'){drawDeck(d,acc);return}
+  if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
+  if(!sugg.length){$('#upBody').innerHTML='<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.</div>';return}
+  let hidden=0;
+  const items=sugg.map((s,i)=>{
+    const isAcc=state.accepted.includes(s.inn.n);
+    const others=acc.filter(a=>a.inn.n!==s.inn.n);
+    const bWith=bracket(applySwaps(d,[...others,s])).b, bWithout=bracket(applySwaps(d,others)).b;
+    if(bWith>target&&!isAcc){hidden++;return null}
+    const up=bWith>bWithout;
+    const tags=[];if(s.inn.gc)tags.push('<span class="pill b3">Game Changer</span>');if(isMLD(s.inn))tags.push('<span class="pill b4">MLD</span>');if(isXT(s.inn))tags.push('<span class="pill">Extra turn</span>');
+    return {up,html:`<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy" data-cmp="${i}">`:`<div data-cmp="${i}" class="noimg">🔍</div>`}
+      <div><div class="in" data-cmp="${i}">＋ ${esc(s.inn.n)} <span class="mu">#${s.inn.r}</span></div>
+      <div class="out" data-cmp="${i}">－ ${esc(s.out.n)} <span class="mu">#${s.out.r||'—'}</span></div>
+      <div class="mu">${ROLE_PL[s.inn.role]}</div>
+      <div>${up?`<span class="pill ${bCls(bWith)}">↑ Bracket ${bLabel(bWith)}</span>`:'<span class="pill">bracket bez zmian</span>'}${tags.join('')}</div>
+      <label><input type="checkbox" data-acc="${esc(s.inn.n)}" ${isAcc?'checked':''}> Akceptuj</label></div></div>`};
+  }).filter(Boolean);
+  // in "raise" mode show bracket-raising cards first
+  if(mode!=='keep')items.sort((a,b)=>b.up-a.up);
+  $('#upBody').innerHTML=`<div class="box"><h3>${mode==='keep'?'Upgrade bez zmiany bracketu':'Upgrade do Bracketu '+bLabel(target)} (${items.length})</h3>
+    <div class="mu">＋ z Twojej kolekcji, － z preconu. Dotknij karty, żeby porównać. #liczba = ranking EDHREC (niżej = częściej grana).${hidden?` Ukryto ${hidden} przekraczających cel.`:''}</div>${items.map(x=>x.html).join('')||'<div class="mu" style="margin-top:8px">Brak propozycji mieszczących się w celu.</div>'}</div>`;
+}
+function drawDeck(d,acc){
+  const outN=new Set(acc.map(s=>s.out.n)),inN=new Set(acc.map(s=>s.inn.n));
+  const all=[...deckCards(d),...acc.map(s=>({...s.inn,qty:1}))];
+  const groups={};
+  for(const c of all){const r=c.cmd?'cmd':role(c);(groups[r]=groups[r]||[]).push(c)}
+  const order=['cmd','creature','ramp','draw','removal','wipe','counter','tutor','protect','other','land'];
+  const lab={...ROLE_PL,cmd:'Dowódca'};
+  window._deckList=all;
+  $('#upBody').innerHTML=order.filter(r=>groups[r]).map(r=>{
+    const g=groups[r].sort((a,b)=>(a.cmc-b.cmc)||a.n.localeCompare(b.n));
+    return `<div class="box"><h3>${lab[r]} <span class="mu">(${g.reduce((s,c)=>s+(outN.has(c.n)?0:c.qty),0)})</span></h3>${g.map(c=>{
+      const st=outN.has(c.n)?'out':inN.has(c.n)?'in':'';
+      return `<div class="item dc ${st}" data-zoom="${esc(c.n)}">${c.img?`<img src="${esc(c.img)}" alt="" loading="lazy">`:'<div class="noimg">🔍</div>'}
+        <div class="grow"><div style="${st==='out'?'text-decoration:line-through':''}">${st==='in'?'＋ ':st==='out'?'－ ':''}${esc(c.n)}</div><div class="mu">${esc((c.t||'').split(' — ')[0])} · CMC ${c.cmc}</div></div>
+        ${c.qty>1?`<span class="mu">×${c.qty}</span>`:''}${c.gc?'<span class="pill b3">GC</span>':''}</div>`}).join('')}</div>`}).join('');
+}
+$('#upBody').onclick=e=>{
+  const cmp=e.target.closest('[data-cmp]');
+  if(cmp){const s=SUG[+cmp.dataset.cmp];zoom([s.inn,card(s.out.n)||s.out],'＋ wchodzi / － wychodzi');return}
+  const z=e.target.closest('[data-zoom]');
+  if(z){zoom([card(z.dataset.zoom)||{n:z.dataset.zoom}])}
+};
+$('#zoom').onclick=()=>$('#zoom').style.display='none';
 $('#upBody').onchange=e=>{const n=e.target.dataset.acc;if(!n)return;
   state.accepted=e.target.checked?[...new Set([...state.accepted,n])]:state.accepted.filter(x=>x!==n);saveState();renderUpgrade()};
 
