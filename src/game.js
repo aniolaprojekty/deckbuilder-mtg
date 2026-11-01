@@ -272,9 +272,9 @@ function settingsHTML(inGame){
     ${inGame?'<div class="mu" style="margin-top:6px">Liczba graczy działa od nowej gry.</div>':'<div class="mu" style="margin-top:6px">Commander: 40 życia, obrażenia od dowódcy odejmują życie.</div>'}`;
 }
 function bindSettings(root,onChange){
-  root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  root.onclick=e=>{const b=e.target.closest('button');if(!b)return; // single handler (re-renders must not stack listeners)
     if(b.dataset.n){opts.n=+b.dataset.n}else if(b.dataset.life){opts.life=+b.dataset.life}else if(b.dataset.opt){opts[b.dataset.opt]=!opts[b.dataset.opt]}else return;
-    saveOpts();onChange&&onChange()});
+    saveOpts();onChange&&onChange()};
 }
 function settingsSheet(){
   sheet(`<h3>Ustawienia gry<button class="x">✕</button></h3>${settingsHTML(true)}
