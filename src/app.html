@@ -127,7 +127,7 @@ textarea{min-height:120px;font-size:13px}
   <div class="box">
     <input id="preSearch" placeholder="Szukaj preconu, dowódcy lub setu…">
     <label class="mu" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="preMine" style="width:auto"> Tylko moje precony (★)</label>
-    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><select id="preSort" style="flex:1"><option value="new">Najnowsze</option><option value="power">Ranking siły</option><option value="value">Wartość (€)</option><option value="bracket">Bracket</option></select>
+    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><select id="preSort" style="flex:1"><option value="new">Najnowsze</option><option value="power">Ranking siły</option><option value="value">Wartość (€)</option><option value="bracket">Bracket</option><option value="owned">Najbliżej złożenia (kolekcja)</option></select>
       <button class="btn sec" id="preRefresh" style="flex:0 0 auto">↻ Przelicz ranking i ceny</button></div>
     <div class="prog"><i id="preProg"></i></div>
     <div class="mu" style="margin-top:6px" id="preInfo"></div>
@@ -164,6 +164,30 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}
           set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Brak miejsca w pamięci przeglądarki')}}};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)}
 const SCRY='https://api.scryfall.com';
+// Save/share a .txt: Android app → system share sheet (Drive, mail, messengers…); browser → share or download
+async function exportTxt(fname,text){
+  const C=window.Capacitor,P=C&&C.Plugins;
+  try{
+    if(P&&P.Filesystem&&P.Share&&C.isNativePlatform&&C.isNativePlatform()){
+      const w=await P.Filesystem.writeFile({path:fname,data:text,directory:'CACHE',encoding:'utf8'});
+      await P.Share.share({title:fname,files:[w.uri],dialogTitle:'Zapisz lub wyślij listę'});return true}
+    const f=new File([text],fname,{type:'text/plain'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:fname});return true}catch(e){if(e.name==='AbortError')return false}}
+    const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);return true;
+  }catch(e){toast('Nie udało się zapisać pliku — użyj „Kopiuj”');return false}
+}
+const fileSafe=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();
+// owned quantity by card name (case-insensitive, front face of double-faced cards)
+function ownedMap(){const m=new Map();for(const [n,q] of Object.entries(collection)){for(const k of [n.toLowerCase(),n.split(' // ')[0].toLowerCase()])m.set(k,(m.get(k)||0)+q)}return m}
+function missingFor(d,skipBasics){
+  const own=ownedMap();let have=0,total=0;const miss=[];
+  for(const c of d.cards){
+    if(skipBasics&&BASICS.has(c.name))continue;
+    const o=own.get(c.name.toLowerCase())||own.get(c.name.split(' // ')[0].toLowerCase())||0;
+    total+=c.qty;have+=Math.min(o,c.qty);if(o<c.qty)miss.push({name:c.name,qty:c.qty-o});
+  }
+  return {have,total,miss};
+}
 // In the APK, CapacitorHttp patches window.fetch with a native client (needed for EDHREC, which lacks CORS).
 // Scryfall and Commander Spellbook support CORS, so they use the original WebView fetch.
 const _webFetch=(window.CapacitorWebFetch||window.fetch).bind(window);
@@ -580,7 +604,7 @@ async function drawBuy(d,b0,target,mode){
     <div style="margin-top:8px">Po zmianach: ${bPill(bAfter)} · do kupienia <b>${toBuy.length}</b> kart · <b>${sum.toFixed(2)} €</b>${shown.length-toBuy.length?` · ${shown.length-toBuy.length} masz w kolekcji`:''}</div>
     <div class="mu">Game Changery: w liście ${gcIn} z ${gcAvail} dostępnych dla tego dowódcy${mode==='keep'&&gcAvail?' (tryb „Zachowaj” je pomija)':''}.</div>
     ${skip.br||skip.price?`<div class="mu">Pominięto: ${skip.br?skip.br+' przekraczających bracket':''}${skip.br&&skip.price?', ':''}${skip.price?skip.price+' poza budżetem':''}</div>`:''}
-    <div class="row" style="margin-top:8px"><button class="btn" id="cpBuy">Kopiuj listę zakupów</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="txtBuy">📄 Lista zakupów (TXT)</button><button class="btn sec" id="cpBuy">Kopiuj</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
     <div class="mu" style="margin-top:4px">Listę wkleisz w Cardmarket → Wants → Import.</div>
     ${shown.map((s,i)=>`<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy" data-bcmp="${i}">`:`<div data-bcmp="${i}" class="noimg">🔍</div>`}
       <div><div class="in" data-bcmp="${i}">＋ ${esc(s.inn.n)} ${s.own?'<span class="pill b12">masz ✓</span>':`<span class="mu">${s.inn.p!=null?s.inn.p.toFixed(2)+' €':'brak ceny'}</span>`}</div>
@@ -592,6 +616,7 @@ async function drawBuy(d,b0,target,mode){
   $('#buyN').onchange=upd;$('#maxPer').onchange=upd;$('#budget').onchange=upd;
   const copy=async t=>{try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){toast('Kopiowanie zablokowane')}};
   $('#cpBuy').onclick=()=>copy(toBuy.map(s=>'1 '+s.inn.n).join('\n'));
+  $('#txtBuy').onclick=()=>exportTxt('zakupy-'+fileSafe(d.name)+'.txt',toBuy.map(s=>'1 '+s.inn.n).join('\n')+'\n');
   $('#cpBuyDeck').onclick=()=>copy(applySwaps(d,shown).map(c=>(c.qty||1)+' '+c.n).join('\n'));
 }
 $('#upBody').onclick=e=>{

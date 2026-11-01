@@ -77,14 +77,18 @@ function renderPreList(){
   const by={new:(a,b)=>b.date.localeCompare(a.date),
     power:(a,b)=>((S[b.id]||{}).raw||-1)-((S[a.id]||{}).raw||-1),
     value:(a,b)=>((S[b.id]||{}).v||-1)-((S[a.id]||{}).v||-1),
-    bracket:(a,b)=>((S[b.id]||{}).b||0)-((S[a.id]||{}).b||0)||((S[b.id]||{}).raw||0)-((S[a.id]||{}).raw||0)};
+    bracket:(a,b)=>((S[b.id]||{}).b||0)-((S[a.id]||{}).b||0)||((S[b.id]||{}).raw||0)-((S[a.id]||{}).raw||0),
+    owned:(a,b)=>own(b)-own(a)};
+  const hasCol=Object.keys(collection).length>0;const OWN={};
+  function own(d){if(OWN[d.id]==null){const m=missingFor(d,true);OWN[d.id]=m.total?m.have/m.total:0;OWN[d.id+'_']=m}return OWN[d.id]}
+  if(hasCol)f.forEach(own);
   f.sort((a,b)=>(mine.has(b.id)-mine.has(a.id))*(sort==='new'?1:0)||by[sort](a,b));
   const age=STATS.ts?Math.round((Date.now()-STATS.ts)/86400000):null;
   $('#preInfo').innerHTML=`${f.length} z ${DECKS.length} preconów · moje: ${mine.size} · ${STATS.ts?`ceny z ${new Date(STATS.ts).toLocaleDateString('pl-PL')}${age>7?' <span class="warn">(stare — odśwież)</span>':''}`:'<span class="warn">ranking i ceny nie są jeszcze policzone</span>'}`;
   $('#preList').innerHTML=f.slice(0,100).map(d=>{const s=S[d.id];
     return `<div class="box deck ${state.deck===d.id?'sel':''}" data-id="${esc(d.id)}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0">
       <b>${esc(d.name)}</b> <span class="mu">${d.set} · ${d.date.slice(0,7)}</span><div class="mu">${esc(d.commanders.join(' / ')||'—')}</div>
-      ${s?`<div style="margin-top:4px">${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span><span class="pill">💪 ${s.score} · #${s.rank}</span></div>`:''}</div>
+      ${s||hasCol?`<div style="margin-top:4px">${s?`${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null?`<span class="pill">💪 ${s.score} · #${s.rank}</span>`:''}`:''}${hasCol?`<span class="pill" title="karty z kolekcji (bez podstawowych lądów)">📦 ${OWN[d.id+'_'].have}/${OWN[d.id+'_'].total}</span>`:''}</div>`:''}</div>
       <button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div></div>`}).join('');
 }
 window.renderPreList=renderPreList;
@@ -129,6 +133,27 @@ function guideHTML(d,cs,s){
   <div class="box"><h3>Struktura talii</h3>${roleRow('land','Lądy')}${roleRow('ramp','Rampa')}${roleRow('draw','Dobór kart')}${roleRow('removal','Usuwanie')}${roleRow('wipe','Czyszczenie stołu')}${roleRow('counter','Kontry')}${roleRow('tutor','Tutory')}${roleRow('creature','Stwory (inne)')}${roleRow('other','Pozostałe')}
     <div class="mu" style="margin-top:6px">Średni koszt many (bez lądów): ${String(s.avg).replace('.',',')}. Zalecenia to typowe proporcje talii Commander.</div></div>`;
 }
+
+function drawBuild(d){
+  const el=$('#dvBuild');if(!el)return;
+  const skip=state.skipBasics!==false;
+  const m=missingFor(d,skip);
+  const cost=m.miss.reduce((t,x)=>{const c=card(x.name);return t+(c&&c.p!=null?c.p*x.qty:0)},0);
+  const noPrice=m.miss.filter(x=>{const c=card(x.name);return !c||c.p==null}).length;
+  const pct=m.total?Math.round(m.have/m.total*100):0;
+  const txt=m.miss.map(x=>x.qty+' '+x.name).join('\n');
+  el.innerHTML=`<h3>Złóż z kolekcji</h3>
+    ${Object.keys(collection).length?'':'<div class="warn">Kolekcja jest pusta — dodaj karty (import lub skaner), a tu zobaczysz, czego brakuje.</div>'}
+    <div>Masz <b>${m.have}/${m.total}</b> kart (${pct}%) · brakuje <b>${m.miss.reduce((a,x)=>a+x.qty,0)}</b> · koszt ok. <b>${eur(cost)}</b>${noPrice?` <span class="mu">(${noPrice} bez ceny)</span>`:''}</div>
+    <div class="prog" style="height:8px"><i style="width:${pct}%;background:var(--ok)"></i></div>
+    <label class="mu" style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="dvSkip" style="width:auto" ${skip?'checked':''}> Pomiń podstawowe lądy</label>
+    <div class="row"><button class="btn" id="dvTxt" ${m.miss.length?'':'disabled'}>📄 Lista brakujących (TXT)</button><button class="btn sec" id="dvCopy" ${m.miss.length?'':'disabled'}>Kopiuj</button></div>
+    <div class="mu" style="margin-top:4px">Format „1 Nazwa karty” — wklej w Cardmarket (Wants → Import), Moxfield lub ManaBox i zamów wszystko naraz.</div>
+    ${m.miss.length?`<details style="margin-top:8px"><summary class="mu">Pokaż brakujące (${m.miss.length})</summary>${m.miss.map(x=>{const c=card(x.name);return `<div class="hrow" data-zoom="${esc(x.name)}" style="cursor:pointer"><span>${x.qty>1?x.qty+'× ':''}${esc(x.name)}</span><span class="mu">${c&&c.p!=null?eur(c.p*x.qty):'—'}</span></div>`}).join('')}</details>`:'<div style="margin-top:8px">✅ Masz wszystkie karty tej talii!</div>'}`;
+  $('#dvSkip').onchange=e=>{state.skipBasics=e.target.checked;saveState();drawBuild(d)};
+  $('#dvTxt').onclick=()=>exportTxt('brakujace-'+fileSafe(d.name)+'.txt',txt+'\n');
+  $('#dvCopy').onclick=async()=>{try{await navigator.clipboard.writeText(txt);toast('Skopiowano listę brakujących')}catch(e){toast('Kopiowanie zablokowane')}};
+}
 let curDeck=null;
 async function renderDeck(){
   const d=DECKS.find(x=>x.id===curDeck);const el=$('#deckView');if(!d){el.innerHTML='';return}
@@ -144,17 +169,19 @@ async function renderDeck(){
     ${cmds.map(c=>c.art?`<div style="height:150px;border-radius:10px;background:url('${esc(c.art)}') center/cover;margin-bottom:8px" data-zoom="${esc(c.n)}"></div>`:'').join('')}
     <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><b style="font-size:17px">${esc(d.name)}</b><div class="mu">${d.set} · ${d.date}</div></div>
       <button class="btn sec" id="dvStar" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div>
-    <div style="margin-top:8px">${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null?`<span class="pill">💪 siła ${s.score}/100 · #${s.rank} z ${STATS.n}</span>`:''}</div>
+    <div style="margin-top:8px">${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null&&s.rank?`<span class="pill">💪 siła ${s.score}/100 · #${s.rank} z ${STATS.n}</span>`:''}</div>
     ${s.why.length?`<div class="mu" style="margin-top:4px">${s.why.map(esc).join('<br>')}</div>`:'<div class="mu" style="margin-top:4px">Brak Game Changerów, MLD, dodatkowych tur i combo 2-kartowych.</div>'}
     ${cmds.map(c=>`<div class="ot" style="margin-top:8px"><b>${esc(c.n)}</b> <span class="mu">${esc(c.t)}</span><br>${symHTML(c.o||'')}</div>`).join('')}
     <div class="row" style="margin-top:10px"><button class="btn" id="dvUp">⬆️ Ulepsz tę talię</button>
       <a class="btn sec" style="text-decoration:none" href="https://www.cardmarket.com/pl/Magic/Products/Search?searchString=${encodeURIComponent(d.name.replace(/\s*\(.*\)$/,''))}" target="_blank" rel="noopener">Pudełko na Cardmarket ↗</a></div>
     <div class="mu" style="margin-top:6px">Wartość = suma aktualnych cen pojedynczych kart (Cardmarket przez Scryfall), nie cena zamkniętego pudełka.</div></div>
+  <div class="box" id="dvBuild"></div>
   ${s.top.length?`<div class="box"><h3>Najdroższe karty</h3>${s.top.map(([n,p])=>`<div class="hrow" data-zoom="${esc(n)}" style="cursor:pointer"><span>${esc(n)}</span><b>${eur(p)}</b></div>`).join('')}</div>`:''}
   ${guideHTML(d,cs,s)}
   <div class="box"><h3>Lista kart (${cs.reduce((a,c)=>a+c.qty,0)})</h3>${order.filter(r=>groups[r]).map(r=>{const gg=groups[r].sort((a,b)=>(a.cmc-b.cmc)||a.n.localeCompare(b.n));
     return `<div class="hturn">${ROLE_PL[r]} (${gg.reduce((a,c)=>a+c.qty,0)})</div>${gg.map(c=>`<div class="item" data-zoom="${esc(c.n)}" style="cursor:pointer">${c.img?`<img src="${esc(c.img)}" alt="" loading="lazy">`:'<div class="noimg">🔍</div>'}
       <div class="grow"><div>${c.qty>1?c.qty+'× ':''}${esc(c.n)}${c.gc?' <span class="pill b3">GC</span>':''}</div><div class="mu">${esc((c.t||'').split(' — ')[0])} · CMC ${c.cmc}</div></div><span class="mu">${eur(c.p)}</span></div>`).join('')}`}).join('')}</div>`;
+  drawBuild(d);
   $('#dvUp').onclick=()=>{state.deck=d.id;state.accepted=[];state.mode='keep';state.view='sug';saveState();show('up')};
   $('#dvStar').onclick=()=>{mine.has(d.id)?mine.delete(d.id):mine.add(d.id);LS.set('mtg.mine',[...mine]);renderDeck()};
   if(!STATS.d[d.id]||!STATS.d[d.id].raw){STATS.d[d.id]={...s,score:STATS.d[d.id]&&STATS.d[d.id].score,rank:STATS.d[d.id]&&STATS.d[d.id].rank};LS.set('mtg.precStats',STATS)}
