@@ -10,7 +10,7 @@ await pg.goto('http://localhost:8780/');
 const life=()=>pg.$$eval('#game .glife',e=>e.map(x=>x.textContent));
 const back=async()=>{await pg.evaluate(()=>window.__back({}));await pg.waitForTimeout(250)};
 await pg.click('nav button[data-t=game]');
-await pg.click('#gameSetup [data-n="4"]');await pg.click('#gameSetup [data-life="40"]');await pg.click('#gStart');
+await pg.click('#gameSetup [data-n="4"]');await pg.click('#gStart');
 console.log('4p life:',await life());
 const tap=async(i,side)=>{const el=await pg.$(`#game .gc[data-p="${i}"] .gtap.${side}`);const bb=await el.boundingBox();await pg.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await pg.mouse.down();await pg.mouse.up()};
 const holdT=async(i,side,ms)=>{const el=await pg.$(`#game .gc[data-p="${i}"] .gtap.${side}`);const bb=await el.boundingBox();await pg.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await pg.mouse.down();await pg.waitForTimeout(ms);await pg.mouse.up()};
