@@ -3,75 +3,121 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#14161c">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <title>Deckbuilder MTG</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
-:root{--bg:#14161c;--card:#1e2129;--line:#2c303b;--tx:#e8e9ed;--mu:#9095a3;--ac:#e0a43a;--ok:#5bbf7a;--bad:#e25c5c;--b3:#e0a43a;--b4:#e25c5c}
-*{box-sizing:border-box}
-body{margin:0;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--tx);padding-bottom:72px}
-header{padding:14px 16px 6px;font-weight:700;font-size:18px}
-header small{color:var(--mu);font-weight:400;font-size:13px;display:block}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0f1115;border-top:1px solid var(--line);z-index:5}
-nav button{flex:1;background:none;border:0;color:var(--mu);padding:10px 1px 12px;font-size:11px}
-nav button b{display:block;font-size:20px;line-height:1.1}
-nav button.on{color:var(--ac)}
-section{display:none;padding:8px 14px}
+/* Monochrom UI (styl Przybornika): jasnoszare tło, białe karty bez ramek, czarne akcenty, turkus = „bieżący” */
+:root{
+  --bg:#eef0f1;--bg-panel:#ffffff;--bg-panel-2:#f5f6f7;--soft:#f1f2f3;--soft-hover:#e4e7e9;
+  --line:#e3e6e8;--line-soft:#eef0f1;--dash:#d3d7da;
+  --text:#15181b;--text-dim:#6b7177;--text-faint:#9aa0a5;
+  --ink:#111315;--ink-hover:#2b2f33;--teal:#5ea9a4;--teal-dk:#2f7f7a;--amber:#b9770e;
+  --warn-text:#8a5a0b;--warn-bg:#fff7e8;--warn-line:#e7c98f;--red:#b42318;--red-hover:#912018;
+  --r-card:11px;--r-btn:7px;--r-tag:5px;
+  --shadow-up:0 10px 24px rgba(17,19,21,.08);--shadow-dlg:0 24px 60px rgba(17,19,21,.25);
+  --sans:'Outfit','Segoe UI',Arial,sans-serif;
+  /* aliasy używane w kodzie */
+  --card:var(--bg-panel);--tx:var(--text);--mu:var(--text-dim);--ac:var(--ink);--ok:var(--teal-dk);--bad:var(--red);--b3:var(--amber);--b4:var(--red);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+body{padding-bottom:76px}
+h3{margin:0 0 10px;font-size:16px;font-weight:500}
+a{color:var(--text);text-underline-offset:3px}
+/* pasek górny */
+header{position:sticky;top:0;z-index:6;min-height:52px;display:flex;flex-wrap:wrap;row-gap:0;align-items:center;gap:10px;padding:8px 16px;background:var(--bg-panel);border-bottom:1px solid var(--line)}
+header .brand{font-weight:600;font-size:15px}
+header .ver{font-size:12px;color:var(--text-faint)}
+header .spacer{flex:1}
+header .by{font-size:12px;color:var(--text-faint);white-space:nowrap}
+header .by b{font-weight:600;color:var(--text)}
+/* dolne menu */
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg-panel);border-top:1px solid var(--line);z-index:5;padding:4px 4px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;color:var(--text-dim);padding:6px 1px;font:500 11px var(--sans);cursor:pointer}
+nav button svg{width:22px;height:22px;padding:3px;box-sizing:content-box;border-radius:var(--r-btn);fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--text);font-weight:600}
+nav button.on svg{background:var(--ink);color:#fff;stroke:#fff}
+section{display:none;padding:6px 14px}
 section.on{display:block}
-.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
-h3{margin:0 0 8px;font-size:15px}
-.mu{color:var(--mu);font-size:13px}
-input,textarea,select{width:100%;background:#0f1115;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
-textarea{min-height:120px;font-size:13px}
-.btn{background:var(--ac);color:#111;border:0;border-radius:8px;padding:10px 14px;font-weight:600;font:inherit;font-weight:600}
-.btn.sec{background:#2c303b;color:var(--tx)}
-.btn:disabled{opacity:.5}
+/* karty */
+.box{background:var(--bg-panel);border:0;border-radius:var(--r-card);padding:16px 18px;margin:12px 0}
+.mu{color:var(--text-dim);font-size:13px}
+/* formularze */
+input,textarea,select{width:100%;min-height:38px;padding:8px 12px;background:var(--bg-panel-2);border:1px solid var(--line);border-radius:var(--r-btn);color:var(--text);font:400 14px var(--sans)}
+textarea{min-height:110px;resize:vertical;font-size:13px}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(17,19,21,.08)}
+input[type=checkbox],input[type=radio]{accent-color:var(--ink);width:16px;height:16px;min-height:0}
+/* przyciski: domyślny = główny (czarny), .sec = drugorzędny */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:0 14px;border:0;border-radius:var(--r-btn);background:var(--ink);color:#fff;font:500 13.5px/1.2 var(--sans);cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}
+.btn:hover{background:var(--ink-hover)}
+.btn.sec{background:var(--soft);color:var(--text)}
+.btn.sec:hover{background:var(--soft-hover)}
+.btn:disabled{background:var(--soft);color:var(--text-faint);cursor:default}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .row>*{flex:0 0 auto}
-.list{max-height:none}
-.item{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+/* wiersze list */
+.item{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft)}
 .item:last-child{border:0}
 .item .grow{flex:1;min-width:0}
 .item img{width:46px;border-radius:4px;flex:0 0 46px}
-.deck{cursor:pointer}
-.deck.sel{outline:2px solid var(--ac);border-radius:8px}
-.pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:600;background:#2c303b;color:var(--tx);margin:2px 4px 2px 0}
-.b12{background:#2f5a3c}.b3{background:#7a5a1d}.b4{background:#7a2a2a}
-.sw{display:grid;grid-template-columns:46px 1fr;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.deck{cursor:pointer;transition:box-shadow .15s,transform .15s}
+.deck:active{transform:translateY(1px)}
+.deck.sel{box-shadow:inset 0 0 0 1.5px var(--ink)}
+/* znaczki */
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:var(--r-tag);padding:2px 8px;font-size:12px;font-weight:500;background:var(--soft);color:var(--text-dim);margin:2px 4px 2px 0;white-space:nowrap}
+.b12{background:#eaf4f3;color:var(--teal-dk)}.b3{background:var(--warn-bg);color:var(--warn-text)}.b4{background:#fdecea;color:var(--red)}
+/* propozycje zamian */
+.sw{display:grid;grid-template-columns:46px 1fr;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+.sw:last-child{border:0}
 .sw img{width:46px;border-radius:4px}
-.in{color:var(--ok)}.out{color:var(--bad)}
+.in{color:var(--teal-dk);font-weight:500}.out{color:var(--red)}
 .sw label{display:flex;gap:6px;align-items:center;font-size:13px}
-.sw input[type=checkbox]{width:auto}
+.sw input[type=checkbox]{width:16px}
+.sw img,.sw .in,.sw .out{cursor:pointer}
+/* skaner */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.cell{background:#0f1115;border:1px solid var(--line);border-radius:6px;padding:4px;font-size:12px}
-.cell canvas{width:100%;display:block;border-radius:3px}
-.cell input{padding:4px;font-size:12px;margin-top:4px}
-.prog{height:4px;background:#2c303b;border-radius:2px;overflow:hidden;margin:6px 0}
-.prog i{display:block;height:100%;background:var(--ac);width:0}
-#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:8px;display:none;z-index:9}
-.warn{color:var(--b3)}
-.kw{padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}.kw:last-child{border:0}
-.kw b{color:var(--ac)}
-.sg{padding:8px;border-bottom:1px solid var(--line);cursor:pointer}
-.cimg{width:100%;max-width:320px;border-radius:4.5%;display:block;margin:0 auto 8px}
-.sym{display:inline-block;min-width:1.4em;padding:0 3px;border-radius:9px;background:#2c303b;font-size:12px;text-align:center}
-.seg{display:flex;background:#0f1115;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{flex:1;background:none;border:0;color:var(--mu);padding:8px 4px;font:inherit;font-size:13px}
-.seg button.on{background:var(--ac);color:#111;font-weight:600}
-#zoom{position:fixed;inset:0;background:#000d;z-index:20;display:none;overflow:auto;padding:16px}
+.cell{background:var(--bg-panel-2);border-radius:var(--r-btn);padding:4px;font-size:12px}
+.cell canvas{width:100%;display:block;border-radius:4px}
+.cell input{padding:4px 6px;min-height:30px;font-size:12px;margin-top:4px}
+/* pasek postępu */
+.prog{height:4px;background:var(--soft);border-radius:2px;overflow:hidden;margin:8px 0}
+.prog i{display:block;height:100%;background:var(--ink);width:0;transition:width .2s}
+/* dymek */
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:calc(100% - 32px);background:var(--bg-panel);color:var(--text);border-left:3px solid var(--ink);border-radius:var(--r-btn);padding:11px 14px;font-size:13.5px;box-shadow:0 14px 34px rgba(17,19,21,.16);display:none;z-index:60}
+.warn{color:var(--warn-text)}
+/* karta / słowa kluczowe */
+.kw{padding:7px 0;border-bottom:1px solid var(--line-soft);font-size:14px}.kw:last-child{border:0}
+.kw b{color:var(--text);font-weight:600}
+.sg{padding:9px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;border-radius:var(--r-btn)}
+.sg:hover{background:var(--bg-panel-2)}
+.cimg{width:100%;max-width:320px;border-radius:4.5%;display:block;margin:0 auto 10px}
+.sym{display:inline-block;min-width:1.5em;padding:0 4px;border-radius:9px;background:var(--soft);font-size:12px;text-align:center;font-weight:500}
+.ot{font-size:13.5px;margin-top:8px;background:var(--bg-panel-2);border-radius:var(--r-btn);padding:10px 12px}
+/* przełącznik segmentowy */
+.seg{display:flex;padding:3px;background:var(--soft);border-radius:var(--r-btn);gap:2px}
+.seg button{flex:1;min-height:32px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:var(--text-dim);font:500 13px var(--sans);cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff}
+/* zbliżenie karty */
+#zoom{position:fixed;inset:0;background:rgba(17,19,21,.42);z-index:20;display:none;overflow:auto;padding:16px}
+#zoomIn{background:var(--bg-panel);border-radius:var(--r-card);box-shadow:var(--shadow-dlg);padding:16px;max-width:560px;margin:0 auto}
 .zr{display:flex;gap:10px}
 .zc{flex:1;min-width:0}
 .zc img{width:100%;border-radius:4.5%;display:block;margin-bottom:6px}
-.ot{font-size:13px;margin-top:6px;background:#0f1115;border-radius:6px;padding:8px}
-.noimg{width:46px;height:64px;border-radius:4px;background:#2c303b;display:flex;align-items:center;justify-content:center}
-.dc.in{background:#1d3324}.dc.out{opacity:.55}
-.sw img,.sw .in,.sw .out{cursor:pointer}
+.noimg{width:46px;height:64px;border-radius:4px;background:var(--soft);display:flex;align-items:center;justify-content:center}
+.dc.in{background:#eaf4f3;border-radius:var(--r-btn)}.dc.out{opacity:.5}
+details summary{cursor:pointer}
+.designed{text-align:center;color:var(--text-faint);font-size:12px;padding:18px 0 8px}
+.designed b{color:var(--text);font-weight:600}
 /*GAMECSS*/
 </style>
 </head>
 <body>
-<header>Deckbuilder MTG<small id="sub">Kolekcja → precon → upgrade z kontrolą bracketu · <span id="ver">wersja __VERSION__</span></small></header>
+<header><span class="brand">Deckbuilder MTG</span><span class="ver" id="ver">wersja __VERSION__</span><span class="spacer"></span><span class="by">designed by <b>Anioła</b></span></header>
 
 <section id="t-col" class="on">
   <div class="box">
@@ -85,6 +131,7 @@ textarea{min-height:120px;font-size:13px}
     <textarea id="imp" placeholder="1 Sol Ring&#10;2 Cultivate"></textarea>
     <div class="row" style="margin-top:8px"><button class="btn" id="impBtn">Dodaj do kolekcji</button><button class="btn sec" id="expBtn">Kopiuj kolekcję</button><button class="btn sec" id="clrBtn">Wyczyść</button></div>
   </div>
+  <div class="designed">Deckbuilder MTG · designed by <b>Anioła</b></div>
 </section>
 
 <section id="t-scan">
@@ -141,12 +188,12 @@ textarea{min-height:120px;font-size:13px}
 </section>
 
 <nav>
-  <button data-t="col" class="on"><b>📚</b>Kolekcja</button>
-  <button data-t="scan"><b>📷</b>Skaner</button>
-  <button data-t="card"><b>🔎</b>Karta</button>
-  <button data-t="pre"><b>🗂️</b>Precony</button>
-  <button data-t="game"><b>🎲</b>Gra</button>
-  <button data-t="up"><b>⬆️</b>Upgrade</button>
+  <button data-t="col" class="on"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="12" height="15" rx="2"/><path d="M5 7v12a2 2 0 0 0 2 2h9"/></svg>Kolekcja</button>
+  <button data-t="scan"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Skaner</button>
+  <button data-t="card"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Karta</button>
+  <button data-t="pre"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg>Precony</button>
+  <button data-t="game"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r=".8"/><circle cx="15" cy="15" r=".8"/><circle cx="15" cy="9" r=".8"/><circle cx="9" cy="15" r=".8"/><circle cx="12" cy="12" r=".8"/></svg>Gra</button>
+  <button data-t="up"><svg viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>Upgrade</button>
 </nav>
 <div id="toast"></div>
 <div id="zoom"><div id="zoomIn"></div></div>

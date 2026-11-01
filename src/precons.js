@@ -89,7 +89,7 @@ function renderPreList(){
     return `<div class="box deck ${state.deck===d.id?'sel':''}" data-id="${esc(d.id)}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0">
       <b>${esc(d.name)}</b> <span class="mu">${d.set} · ${d.date.slice(0,7)}</span><div class="mu">${esc(d.commanders.join(' / ')||'—')}</div>
       ${s||hasCol?`<div style="margin-top:4px">${s?`${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null?`<span class="pill">💪 ${s.score} · #${s.rank}</span>`:''}`:''}${hasCol?`<span class="pill" title="karty z kolekcji (bez podstawowych lądów)">📦 ${OWN[d.id+'_'].have}/${OWN[d.id+'_'].total}</span>`:''}</div>`:''}</div>
-      <button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div></div>`}).join('');
+      <button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?"var(--amber)":"var(--text-faint)"}">${mine.has(d.id)?'★':'☆'}</button></div></div>`}).join('');
 }
 window.renderPreList=renderPreList;
 /* ---------- deck detail ---------- */
@@ -168,7 +168,7 @@ async function renderDeck(){
   el.innerHTML=`<div class="box">
     ${cmds.map(c=>c.art?`<div style="height:150px;border-radius:10px;background:url('${esc(c.art)}') center/cover;margin-bottom:8px" data-zoom="${esc(c.n)}"></div>`:'').join('')}
     <div class="row" style="flex-wrap:nowrap"><div style="flex:1"><b style="font-size:17px">${esc(d.name)}</b><div class="mu">${d.set} · ${d.date}</div></div>
-      <button class="btn sec" id="dvStar" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div>
+      <button class="btn sec" id="dvStar" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?"var(--amber)":"var(--text-faint)"}">${mine.has(d.id)?'★':'☆'}</button></div>
     <div style="margin-top:8px">${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null&&s.rank?`<span class="pill">💪 siła ${s.score}/100 · #${s.rank} z ${STATS.n}</span>`:''}</div>
     ${s.why.length?`<div class="mu" style="margin-top:4px">${s.why.map(esc).join('<br>')}</div>`:'<div class="mu" style="margin-top:4px">Brak Game Changerów, MLD, dodatkowych tur i combo 2-kartowych.</div>'}
     ${cmds.map(c=>`<div class="ot" style="margin-top:8px"><b>${esc(c.n)}</b> <span class="mu">${esc(c.t)}</span><br>${symHTML(c.o||'')}</div>`).join('')}
