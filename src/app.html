@@ -153,6 +153,11 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}
           set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Brak miejsca w pamięci przeglądarki')}}};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)}
 const SCRY='https://api.scryfall.com';
+// In the APK, CapacitorHttp patches window.fetch with a native client (needed for EDHREC, which lacks CORS).
+// Scryfall and Commander Spellbook support CORS, so they use the original WebView fetch.
+const _webFetch=(window.CapacitorWebFetch||window.fetch).bind(window);
+function wfetch(u,o={}){return _webFetch(u,{...o,headers:{Accept:'application/json',...(o.headers||{})}})}
+async function errText(r){try{const j=await r.json();return j.details||j.error||j.code||''}catch(e){return ''}}
 const BASICS=new Set(['Plains','Island','Swamp','Mountain','Forest','Wastes','Snow-Covered Plains','Snow-Covered Island','Snow-Covered Swamp','Snow-Covered Mountain','Snow-Covered Forest']);
 
 /* ---------- precons ---------- */
@@ -183,9 +188,15 @@ async function fetchCards(names,onProg,needPrice){
   const missing=[];
   for(let i=0;i<need.length;i+=75){
     const batch=need.slice(i,i+75);
-    const r=await fetch(SCRY+'/cards/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifiers:batch.map(n=>({name:n}))})});
-    if(!r.ok)throw new Error('Scryfall: błąd '+r.status);
-    const j=await r.json();
+    let r=await wfetch(SCRY+'/cards/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifiers:batch.map(n=>({name:n}))})});
+    let j;
+    if(r.ok)j=await r.json();
+    else{ // fallback: one card at a time
+      const why=await errText(r);j={data:[],not_found:[]};let ok=0;
+      for(const n of batch){const q=await wfetch(SCRY+'/cards/named?exact='+encodeURIComponent(n));
+        if(q.ok){j.data.push(await q.json());ok++}else j.not_found.push({name:n});await sleep(100)}
+      if(!ok)throw new Error('Scryfall: błąd '+r.status+(why?' ('+why+')':''));
+    }
     (j.data||[]).forEach(put);
     (j.not_found||[]).forEach(x=>missing.push(x.name));
     onProg&&onProg(Math.min(1,(i+75)/need.length));
@@ -194,7 +205,7 @@ async function fetchCards(names,onProg,needPrice){
   // retry missing by front face name
   const retry=missing.filter(n=>n.includes(' // ')||n.includes('/'));
   for(const n of retry){
-    try{const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(n.split('/')[0].trim()));if(r.ok){const c=put(await r.json());cache[n.toLowerCase()]=c}}catch(e){}
+    try{const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(n.split('/')[0].trim()));if(r.ok){const c=put(await r.json());cache[n.toLowerCase()]=c}}catch(e){}
     await sleep(110);
   }
   LS.set('mtg.cards',cache);
@@ -244,7 +255,7 @@ async function loadSpellbook(names,commanders){
   const key=[...names].sort().join('|').length+':'+names.length;
   if(spellbook.key===key&&spellbook.combos)return;
   try{
-    const r=await fetch('https://backend.commanderspellbook.com/find-my-combos',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await wfetch('https://backend.commanderspellbook.com/find-my-combos',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({commanders:commanders.map(c=>({card:c})),main:names.filter(n=>!commanders.includes(n)).map(c=>({card:c,quantity:1}))})});
     if(!r.ok)throw 0;
     const j=await r.json();const res=j.results||j;
@@ -499,7 +510,7 @@ async function loadBuyPool(d){
   if(!pool){ // fallback: most played Commander cards in color identity
     const score=new Map();let url=SCRY+'/cards/search?order=edhrec&q='+encodeURIComponent(`id<=${ci} f:commander -t:basic`);
     for(let page=0;page<3&&url;page++){
-      const r=await fetch(url);if(!r.ok)break;const j=await r.json();
+      const r=await wfetch(url);if(!r.ok)break;const j=await r.json();
       for(const c of j.data||[]){const x=put(c);score.set(x.n,Math.max(0,1-(x.r||40000)/40000))}
       url=j.has_more?j.next_page:null;await sleep(110);
     }
@@ -618,8 +629,8 @@ $('#photo').onchange=async e=>{
       const {data}=await worker.recognize(cv);
       const raw=data.text.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim();
       let name='';
-      if(raw.length>=3){try{const rr=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(raw));if(rr.ok){const cd=put(await rr.json());name=cd.n}}catch(_){}
-        if(!name){try{const rr=await fetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(raw.slice(0,20)));const j=await rr.json();name=(j.data||[])[0]||''}catch(_){}}}
+      if(raw.length>=3){try{const rr=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(raw));if(rr.ok){const cd=put(await rr.json());name=cd.n}}catch(_){}
+        if(!name){try{const rr=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(raw.slice(0,20)));const j=await rr.json();name=(j.data||[])[0]||''}catch(_){}}}
       inp.value=name;inp.title='OCR: '+raw;scanRes[i]=inp;
       prog.style.width=((i+1)/(rows*cols)*100)+'%';msg.textContent=`Rozpoznano ${i+1}/${rows*cols}`;
       await sleep(80);
@@ -783,24 +794,24 @@ async function showCard(c){
     <div id="cardCombos" class="mu" style="margin-top:6px">Szukam combo (Commander Spellbook)…</div></div>
   <div class="box"><h3>Oficjalne rulingi</h3><div id="cardRulings" class="mu">Wczytuję…</div></div>`;
   $('#cardAdd').onclick=()=>{addToCol({[c.name]:1});toast('Dodano do kolekcji');showCard(c)};
-  try{const r=await fetch(c.rulings_uri);const j=await r.json();const rs=j.data||[];
+  try{const r=await wfetch(c.rulings_uri);const j=await r.json();const rs=j.data||[];
     $('#cardRulings').innerHTML=rs.length?rs.map(x=>`<div class="kw"><span class="mu">${esc(x.published_at)}</span><br>${esc(x.comment)}</div>`).join('')+'<div class="mu" style="margin-top:6px">Rulingi są po angielsku (źródło: Wizards / Scryfall).</div>':'Brak rulingów dla tej karty.'}
   catch(e){$('#cardRulings').textContent='Nie udało się pobrać rulingów.'}
-  try{const r=await fetch('https://backend.commanderspellbook.com/variants/?limit=8&q='+encodeURIComponent(`card:"${c.name.split(' // ')[0]}"`));if(!r.ok)throw 0;
+  try{const r=await wfetch('https://backend.commanderspellbook.com/variants/?limit=8&q='+encodeURIComponent(`card:"${c.name.split(' // ')[0]}"`));if(!r.ok)throw 0;
     const j=await r.json();const vs=(j.results||[]).map(v=>({with:(v.uses||[]).map(u=>(u.card&&u.card.name)||'').filter(n=>n&&n!==c.name),res:(v.produces||[]).map(p=>(p.feature&&p.feature.name)||p.name||'').filter(Boolean).slice(0,2)}));
     const el=$('#cardCombos');if(el)el.innerHTML=vs.length?'<b>Combo (Commander Spellbook):</b>'+vs.map(v=>`<div class="kw">＋ ${esc(v.with.join(' + '))}${v.res.length?` <span class="mu">→ ${esc(v.res.join(', '))}</span>`:''}</div>`).join(''):'Brak znanych combo z tą kartą.'}
   catch(e){const el=$('#cardCombos');if(el)el.textContent='Commander Spellbook niedostępny.'}
 }
 async function lookupCard(q){
   const msg=$('#cardMsg');msg.textContent='Szukam…';$('#cardSugg').innerHTML='';
-  try{const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(q));
+  try{const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(q));
     if(!r.ok){msg.textContent='Nie znaleziono karty „'+q+'”. Spróbuj wpisać nazwę.';return false}
     msg.textContent='';await showCard(await r.json());return true}
   catch(e){msg.innerHTML='<span class="warn">Brak połączenia ze Scryfall.</span>';return false}
 }
 let acT=null;
 $('#cardQ').oninput=()=>{clearTimeout(acT);const q=$('#cardQ').value.trim();if(q.length<3){$('#cardSugg').innerHTML='';return}
-  acT=setTimeout(async()=>{try{const r=await fetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(q));const j=await r.json();
+  acT=setTimeout(async()=>{try{const r=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(q));const j=await r.json();
     $('#cardSugg').innerHTML=(j.data||[]).slice(0,8).map(n=>`<div class="sg" data-n="${esc(n)}">${esc(n)}</div>`).join('')}catch(e){}},250)};
 $('#cardQ').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();lookupCard($('#cardQ').value.trim());$('#cardQ').blur()}};
 $('#cardSugg').onclick=e=>{const n=e.target.closest('[data-n]');if(n){$('#cardQ').value=n.dataset.n;lookupCard(n.dataset.n)}};
@@ -819,7 +830,7 @@ $('#cardPhoto').onchange=async e=>{
     const {data}=await worker.recognize(cv);await worker.terminate();prog.style.width='80%';
     const lines=data.text.split('\n').map(l=>l.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim()).filter(l=>l.length>=3).sort((a,b)=>b.length-a.length).slice(0,4);
     for(const l of lines){msg.textContent='Dopasowuję: „'+l+'”…';
-      const r=await fetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(l));
+      const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(l));
       if(r.ok){prog.style.width='100%';msg.textContent='Rozpoznano z OCR: „'+l+'”';$('#cardQ').value='';await showCard(await r.json());return}
       await sleep(110)}
     msg.innerHTML='<span class="warn">Nie rozpoznałem nazwy'+(lines[0]?' (OCR: „'+esc(lines[0])+'”)':'')+'. Zrób zdjęcie bliżej, z nazwą u góry kadru, albo wpisz nazwę.</span>';
