@@ -229,6 +229,22 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
           set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Brak miejsca w pamięci przeglądarki')}}};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)}
+// Order on Cardmarket: copy the list, then show steps + link (Cardmarket has no URL import, the list must be pasted)
+const CM_WANTS='https://www.cardmarket.com/pl/Magic/Wants';
+async function orderCardmarket(text,count){
+  let copied=false;try{await navigator.clipboard.writeText(text);copied=true}catch(e){}
+  $('#zoomIn').innerHTML=`<h3>🛒 Zamów na Cardmarket</h3>
+    <div class="${copied?'':'warn'}" style="margin-bottom:8px">${copied?`✅ Lista ${count} kart jest w schowku.`:'Nie udało się skopiować automatycznie — skopiuj listę poniżej.'}</div>
+    <div class="kw">1. Otwórz Cardmarket i zaloguj się.</div>
+    <div class="kw">2. <b>Wants</b> (Listy życzeń) → <b>Utwórz nową listę</b>.</div>
+    <div class="kw">3. W liście wybierz <b>Importuj</b> / „Add Deck List” i <b>wklej</b> listę.</div>
+    <div class="kw">4. <b>Shopping Wizard</b> dobierze sprzedawców — zamówisz wszystko naraz.</div>
+    <textarea readonly style="margin-top:8px;min-height:90px;font-size:12px" id="cmTxt">${esc(text)}</textarea>
+    <div class="row" style="margin-top:10px"><a class="btn" href="${CM_WANTS}" target="_blank" rel="noopener" style="text-decoration:none">Otwórz Cardmarket ↗</a><button class="btn sec" id="cmCopy">Kopiuj ponownie</button></div>`;
+  $('#zoom').style.display='block';nav({t:curTab,v:state.view,zoom:1});
+  $('#cmCopy').onclick=async e=>{e.stopPropagation();try{await navigator.clipboard.writeText(text);toast('Skopiowano')}catch(err){$('#cmTxt').select();toast('Zaznaczono — skopiuj ręcznie')}};
+  $('#cmTxt').onclick=e=>e.stopPropagation();
+}
 const SCRY='https://api.scryfall.com';
 // Save/share a .txt: Android app → system share sheet (Drive, mail, messengers…); browser → share or download
 async function exportTxt(fname,text){
@@ -716,7 +732,7 @@ async function drawBuy(d,b0,target,mode){
     <div style="margin-top:8px">Po zmianach: ${bPill(bAfter)} · do kupienia <b>${toBuy.length}</b> kart · <b>${sum.toFixed(2)} €</b>${shown.length-toBuy.length?` · ${shown.length-toBuy.length} masz w kolekcji`:''}</div>
     <div class="mu">Game Changery: w liście ${gcIn} z ${gcAvail} dostępnych dla tego dowódcy${mode==='keep'&&gcAvail?' (tryb „Zachowaj” je pomija)':''}.</div>
     ${skip.br||skip.price?`<div class="mu">Pominięto: ${skip.br?skip.br+' przekraczających bracket':''}${skip.br&&skip.price?', ':''}${skip.price?skip.price+' poza budżetem':''}</div>`:''}
-    <div class="row" style="margin-top:8px"><button class="btn" id="txtBuy">📄 Lista zakupów (TXT)</button><button class="btn sec" id="cpBuy">Kopiuj</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="cmBuy">🛒 Zamów na Cardmarket</button><button class="btn sec" id="txtBuy">📄 TXT</button><button class="btn sec" id="cpBuy">Kopiuj</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
     <div class="mu" style="margin-top:4px">Listę wkleisz w Cardmarket → Wants → Import.</div>
     ${shown.map((s,i)=>`<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy" data-bcmp="${i}">`:`<div data-bcmp="${i}" class="noimg">🔍</div>`}
       <div><div class="in" data-bcmp="${i}">＋ ${esc(s.inn.n)} ${s.own?'<span class="pill b12">masz ✓</span>':`<span class="mu">${s.inn.p!=null?s.inn.p.toFixed(2)+' €':'brak ceny'}</span>`}</div>
@@ -728,6 +744,7 @@ async function drawBuy(d,b0,target,mode){
   $('#buyN').onchange=upd;$('#maxPer').onchange=upd;$('#budget').onchange=upd;
   const copy=async t=>{try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){toast('Kopiowanie zablokowane')}};
   $('#cpBuy').onclick=()=>copy(toBuy.map(s=>'1 '+s.inn.n).join('\n'));
+  $('#cmBuy').onclick=()=>orderCardmarket(toBuy.map(s=>'1 '+s.inn.n).join('\n'),toBuy.length);
   $('#txtBuy').onclick=()=>exportTxt('zakupy-'+fileSafe(d.name)+'.txt',toBuy.map(s=>'1 '+s.inn.n).join('\n')+'\n');
   $('#cpBuyDeck').onclick=()=>copy(applySwaps(d,shown).map(c=>(c.qty||1)+' '+c.n).join('\n'));
 }

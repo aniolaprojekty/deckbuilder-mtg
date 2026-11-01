@@ -25,3 +25,15 @@ for(const native of [false,true]){
  console.log('errors:',errs);await pg.close();
 }
 await b.close();srv.close()})();
+// Cardmarket order dialog
+(async()=>{const {chromium}=require('playwright');const http=require('http'),fs=require('fs'),path=require('path');
+const srv=http.createServer((q,r)=>fs.readFile(path.join(__dirname,'..','www',q.url==='/'?'index.html':q.url.split('?')[0]),(e,d)=>{if(e){r.writeHead(404);r.end()}else r.end(d)})).listen(8793);
+const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:390,height:844},permissions:['clipboard-read','clipboard-write']});const pg=await ctx.newPage();const errs=[];pg.on('pageerror',e=>errs.push(e.message));
+await pg.route('https://api.scryfall.com/**',async rt=>{const ids=JSON.parse(rt.request().postData()||'{"identifiers":[]}').identifiers;rt.fulfill({json:{data:ids.map(i=>({name:i.name,type_line:'Instant',oracle_text:'',cmc:1,color_identity:['G'],legalities:{commander:'legal'},prices:{eur:'1'}})),not_found:[]}})});
+await pg.route('https://fonts.googleapis.com/**',r=>r.abort());
+await pg.goto('http://localhost:8793/');await pg.fill('#imp','1 Sol Ring');await pg.click('#impBtn');
+await pg.click('nav button[data-t=pre]');await pg.fill('#preSearch','Deadly Disguise');await pg.click('#preList .deck');await pg.waitForSelector('#dvCm',{timeout:20000});
+await pg.click('#dvCm');await pg.waitForSelector('#cmCopy');
+const clip=await pg.evaluate(()=>navigator.clipboard.readText());
+console.log('[cardmarket] dialog:',(await pg.textContent('#zoomIn')).replace(/\s+/g,' ').slice(0,80),'| clipboard lines:',clip.trim().split('\n').length,'| link:',await pg.$eval('#zoomIn a',a=>a.href));
+await pg.screenshot({path:'/tmp/cm.png'});console.log('[cardmarket] errors:',errs);await b.close();srv.close()})();

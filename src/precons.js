@@ -147,10 +147,11 @@ function drawBuild(d){
     <div>Masz <b>${m.have}/${m.total}</b> kart (${pct}%) · brakuje <b>${m.miss.reduce((a,x)=>a+x.qty,0)}</b> · koszt ok. <b>${eur(cost)}</b>${noPrice?` <span class="mu">(${noPrice} bez ceny)</span>`:''}</div>
     <div class="prog" style="height:8px"><i style="width:${pct}%;background:var(--ok)"></i></div>
     <label class="mu" style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="dvSkip" style="width:auto" ${skip?'checked':''}> Pomiń podstawowe lądy</label>
-    <div class="row"><button class="btn" id="dvTxt" ${m.miss.length?'':'disabled'}>📄 Lista brakujących (TXT)</button><button class="btn sec" id="dvCopy" ${m.miss.length?'':'disabled'}>Kopiuj</button></div>
+    <div class="row"><button class="btn" id="dvCm" ${m.miss.length?'':'disabled'}>🛒 Zamów na Cardmarket</button><button class="btn sec" id="dvTxt" ${m.miss.length?'':'disabled'}>📄 TXT</button><button class="btn sec" id="dvCopy" ${m.miss.length?'':'disabled'}>Kopiuj</button></div>
     <div class="mu" style="margin-top:4px">Format „1 Nazwa karty” — wklej w Cardmarket (Wants → Import), Moxfield lub ManaBox i zamów wszystko naraz.</div>
     ${m.miss.length?`<details style="margin-top:8px"><summary class="mu">Pokaż brakujące (${m.miss.length})</summary>${m.miss.map(x=>{const c=card(x.name);return `<div class="hrow" data-zoom="${esc(x.name)}" style="cursor:pointer"><span>${x.qty>1?x.qty+'× ':''}${esc(x.name)}</span><span class="mu">${c&&c.p!=null?eur(c.p*x.qty):'—'}</span></div>`}).join('')}</details>`:'<div style="margin-top:8px">✅ Masz wszystkie karty tej talii!</div>'}`;
   $('#dvSkip').onchange=e=>{state.skipBasics=e.target.checked;saveState();drawBuild(d)};
+  $('#dvCm').onclick=()=>orderCardmarket(txt,m.miss.reduce((a,x)=>a+x.qty,0));
   $('#dvTxt').onclick=()=>exportTxt('brakujace-'+fileSafe(d.name)+'.txt',txt+'\n');
   $('#dvCopy').onclick=async()=>{try{await navigator.clipboard.writeText(txt);toast('Skopiowano listę brakujących')}catch(e){toast('Kopiowanie zablokowane')}};
 }
