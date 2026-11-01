@@ -113,6 +113,14 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ink);width:16px;height
 .noimg{width:46px;height:64px;border-radius:4px;background:var(--soft);display:flex;align-items:center;justify-content:center}
 .dc.in{background:#eaf4f3;border-radius:var(--r-btn)}.dc.out{opacity:.5}
 details summary{cursor:pointer}
+.cf{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.cf button{border:0;background:var(--soft);color:var(--text);border-radius:var(--r-btn);padding:6px 10px;font:500 13px var(--sans);cursor:pointer}
+.cf button.on{background:var(--ink);color:#fff}
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.cg{position:relative;cursor:pointer}
+.cg img{width:100%;display:block;border-radius:4.5%}
+.cgph{aspect-ratio:63/88;border-radius:4.5%;background:var(--soft);display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;padding:6px;color:var(--text-dim)}
+.cgq{position:absolute;right:4px;bottom:4px;background:var(--ink);color:#fff;border-radius:var(--r-tag);padding:0 6px;font-size:12px;font-weight:600}
 .designed{text-align:center;color:var(--text-faint);font-size:12px;padding:18px 0 8px}
 .designed b{color:var(--text);font-weight:600}
 /*GAMECSS*/
@@ -125,6 +133,12 @@ details summary{cursor:pointer}
   <div class="box">
     <h3>Kolekcja <span id="colCount" class="mu"></span></h3>
     <div class="row"><input id="colSearch" placeholder="Szukaj w kolekcji…" style="flex:1"></div>
+    <div class="cf" id="colColors"></div>
+    <div class="cf" id="colTypes"></div>
+    <div class="row" style="flex-wrap:nowrap;margin-top:8px"><select id="colSort" style="flex:1"><option value="name">Nazwa</option><option value="cmc">Koszt many</option><option value="price">Cena</option><option value="color">Kolor</option><option value="qty">Ilość</option></select>
+      <div class="seg" id="colView" style="flex:0 0 auto"><button data-v="list">Lista</button><button data-v="grid">Siatka</button></div></div>
+    <div class="prog"><i id="colProg"></i></div>
+    <div class="mu" id="colInfo"></div>
     <div id="colList" class="list"></div>
   </div>
   <div class="box">
@@ -397,6 +411,7 @@ function show(t,fromPop){
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));
   if(t==='up')renderUpgrade();
+  if(t==='col')renderCol();
   if(t==='pre')renderPre();
   if(t==='game'&&window.GAME)GAME.renderTab();
   if(t==='deck'&&window.renderDeck)renderDeck();
@@ -419,15 +434,60 @@ function addToCol(map){let k=0;for(const [n,q] of Object.entries(map)){collectio
 $('#impBtn').onclick=()=>{const m=parseList($('#imp').value);const k=addToCol(m);$('#imp').value='';toast(`Dodano ${k} kart`)};
 $('#clrBtn').onclick=()=>{if($('#clrBtn').dataset.c){collection={};saveCol();renderCol();$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c}else{$('#clrBtn').dataset.c=1;$('#clrBtn').textContent='Na pewno?';setTimeout(()=>{$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c},3000)}};
 $('#expBtn').onclick=async()=>{const t=Object.entries(collection).map(([n,q])=>q+' '+n).join('\n');try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){$('#imp').value=t;toast('Lista wstawiona w pole importu')}};
-$('#colSearch').oninput=renderCol;
-function renderCol(){
-  const q=$('#colSearch').value.toLowerCase();
-  const e=Object.entries(collection).sort((a,b)=>a[0].localeCompare(b[0]));
-  $('#colCount').textContent=`— ${e.reduce((s,x)=>s+x[1],0)} kart, ${e.length} unikalnych`;
-  const f=e.filter(([n])=>n.toLowerCase().includes(q)).slice(0,200);
-  $('#colList').innerHTML=f.length?f.map(([n,qt])=>`<div class="item"><div class="grow">${esc(n)}</div><span class="mu">×${qt}</span><button class="btn sec" data-del="${esc(n)}" style="padding:4px 10px">−</button></div>`).join('')+(e.length>200&&!q?'<div class="mu">…pokazano 200, użyj wyszukiwania</div>':''):'<div class="mu">Pusto. Zaimportuj listę albo zeskanuj stronę klasera.</div>';
+/* collection browser: thumbnails, colour & type filters, sort, list/grid */
+const COLF=LS.get('mtg.colF',{c:[],t:'',sort:'name',view:'list'});
+const saveColF=()=>LS.set('mtg.colF',COLF);
+const CCHIPS=[['W','⚪','Biały'],['U','🔵','Niebieski'],['B','⚫','Czarny'],['R','🔴','Czerwony'],['G','🟢','Zielony'],['C','◇','Bezbarwne'],['M','🌈','Wielokolorowe']];
+const TCHIPS=[['creature','Stwory',/creature/i],['instant','Instanty',/instant/i],['sorcery','Sorcery',/sorcery/i],['artifact','Artefakty',/artifact/i],['enchantment','Zaklęcia',/enchantment/i],['planeswalker','Planeswalkery',/planeswalker/i],['land','Lądy',/\bland\b/i],['commander','Kandydaci na dowódcę',/legendary.*creature|can be your commander/i]];
+const WUBRG='WUBRG';
+let colLoading=false;
+async function ensureColData(){
+  const names=Object.keys(collection).filter(n=>!card(n));
+  if(!names.length||colLoading)return;
+  colLoading=true;
+  try{await fetchCards(names,p=>{const b=$('#colProg');if(b)b.style.width=(p*100)+'%'},false,false)}catch(e){toast('Bez internetu — miniatury pojawią się później')}
+  colLoading=false;const b=$('#colProg');if(b)b.style.width=0;renderCol(true);
 }
-$('#colList').onclick=e=>{const n=e.target.dataset.del;if(!n)return;collection[n]--;if(collection[n]<=0)delete collection[n];saveCol();renderCol()};
+function renderCol(noFetch){
+  $('#colColors').innerHTML=CCHIPS.map(([k,ic,l])=>`<button data-cc="${k}" class="${COLF.c.includes(k)?'on':''}" title="${l}">${ic}${k==='M'||k==='C'?' '+l:''}</button>`).join('');
+  $('#colTypes').innerHTML=TCHIPS.map(([k,l])=>`<button data-ct="${k}" class="${COLF.t===k?'on':''}">${l}</button>`).join('');
+  $('#colSort').value=COLF.sort;
+  $('#colView').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===COLF.view));
+  const q=$('#colSearch').value.toLowerCase();
+  const all=Object.entries(collection);
+  $('#colCount').textContent=`— ${all.reduce((s,x)=>s+x[1],0)} kart, ${all.length} unikalnych`;
+  const T=TCHIPS.find(x=>x[0]===COLF.t);
+  const sel=COLF.c.filter(x=>x!=='M');const multi=COLF.c.includes('M');
+  let rows=all.map(([n,qt])=>({n,qt,c:card(n)}))
+    .filter(r=>!q||r.n.toLowerCase().includes(q))
+    .filter(r=>{if(!COLF.c.length)return true;if(!r.c)return false;const ci=r.c.ci||'';
+      if(multi&&ci.length<2)return false;
+      if(!sel.length)return true;
+      return sel.some(x=>x==='C'?ci==='':ci.includes(x))})
+    .filter(r=>!T||(r.c&&T[2].test(r.c.t||'')));
+  const ck=c=>{const ci=(c&&c.ci)||'';return ci.length===0?6:ci.length>1?5:WUBRG.indexOf(ci)};
+  const by={name:(a,b)=>a.n.localeCompare(b.n),cmc:(a,b)=>((a.c||{}).cmc||0)-((b.c||{}).cmc||0)||a.n.localeCompare(b.n),
+    price:(a,b)=>(((b.c||{}).p)||0)-(((a.c||{}).p)||0),color:(a,b)=>ck(a.c)-ck(b.c)||a.n.localeCompare(b.n),qty:(a,b)=>b.qt-a.qt||a.n.localeCompare(b.n)};
+  rows.sort(by[COLF.sort]||by.name);
+  const val=rows.reduce((t,r)=>t+((r.c&&r.c.p)||0)*r.qt,0);
+  const missing=all.filter(([n])=>!card(n)).length;
+  $('#colInfo').innerHTML=all.length?`Pokazano ${rows.length} · ${rows.reduce((s,r)=>s+r.qt,0)} kart · wartość ok. ${val.toFixed(2).replace('.',',')} €${missing?` · <span class="warn">${missing} bez danych${colLoading?' (pobieram…)':''}</span>`:''}`:'';
+  const LIM=300,shown=rows.slice(0,LIM);
+  if(!all.length)$('#colList').innerHTML='<div class="mu" style="margin-top:8px">Pusto. Zaimportuj listę albo zeskanuj stronę klasera.</div>';
+  else if(COLF.view==='grid')$('#colList').innerHTML=`<div class="cgrid">${shown.map(r=>`<div class="cg" data-zoom="${esc(r.n)}">${r.c&&r.c.img?`<img src="${esc(r.c.img.replace('/small/','/normal/'))}" alt="${esc(r.n)}" loading="lazy">`:`<div class="cgph">${esc(r.n)}</div>`}${r.qt>1?`<span class="cgq">×${r.qt}</span>`:''}</div>`).join('')}</div>`;
+  else $('#colList').innerHTML=shown.map(r=>`<div class="item"><div data-zoom="${esc(r.n)}" style="cursor:pointer">${r.c&&r.c.img?`<img src="${esc(r.c.img)}" alt="" loading="lazy">`:'<div class="noimg">🔍</div>'}</div>
+      <div class="grow" data-zoom="${esc(r.n)}" style="cursor:pointer"><div>${esc(r.n)}</div><div class="mu">${r.c?esc((r.c.t||'').split(' — ')[0])+' · '+(r.c.ci?r.c.ci.split('').join(''):'bezbarwna')+(r.c.p!=null?' · '+r.c.p.toFixed(2).replace('.',',')+' €':''):'—'}</div></div>
+      <span class="mu">×${r.qt}</span><button class="btn sec" data-del="${esc(r.n)}" style="min-height:32px;padding:0 12px">−</button></div>`).join('');
+  if(rows.length>LIM)$('#colList').insertAdjacentHTML('beforeend',`<div class="mu" style="margin-top:8px">…pokazano ${LIM} z ${rows.length}, zawęź filtry.</div>`);
+  if(!noFetch)ensureColData();
+}
+$('#colSearch').oninput=()=>renderCol(true);
+$('#colSort').onchange=e=>{COLF.sort=e.target.value;saveColF();renderCol(true)};
+$('#colView').onclick=e=>{const b=e.target.closest('[data-v]');if(!b)return;COLF.view=b.dataset.v;saveColF();renderCol(true)};
+$('#colColors').onclick=e=>{const b=e.target.closest('[data-cc]');if(!b)return;const k=b.dataset.cc;COLF.c=COLF.c.includes(k)?COLF.c.filter(x=>x!==k):[...COLF.c,k];saveColF();renderCol(true)};
+$('#colTypes').onclick=e=>{const b=e.target.closest('[data-ct]');if(!b)return;COLF.t=COLF.t===b.dataset.ct?'':b.dataset.ct;saveColF();renderCol(true)};
+$('#colList').onclick=e=>{const d=e.target.closest('[data-del]');if(d){const n=d.dataset.del;collection[n]--;if(collection[n]<=0)delete collection[n];saveCol();renderCol(true);return}
+  const z=e.target.closest('[data-zoom]');if(z)zoom([card(z.dataset.zoom)||{n:z.dataset.zoom}])};
 
 /* ---------- precons ---------- */
 $('#preSearch').oninput=renderPre;$('#preMine').onchange=renderPre;
