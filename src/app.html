@@ -14,7 +14,7 @@ body{margin:0;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif
 header{padding:14px 16px 6px;font-weight:700;font-size:18px}
 header small{color:var(--mu);font-weight:400;font-size:13px;display:block}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0f1115;border-top:1px solid var(--line);z-index:5}
-nav button{flex:1;background:none;border:0;color:var(--mu);padding:10px 2px 12px;font-size:12px}
+nav button{flex:1;background:none;border:0;color:var(--mu);padding:10px 1px 12px;font-size:11px}
 nav button b{display:block;font-size:20px;line-height:1.1}
 nav button.on{color:var(--ac)}
 section{display:none;padding:8px 14px}
@@ -67,6 +67,7 @@ textarea{min-height:120px;font-size:13px}
 .noimg{width:46px;height:64px;border-radius:4px;background:#2c303b;display:flex;align-items:center;justify-content:center}
 .dc.in{background:#1d3324}.dc.out{opacity:.55}
 .sw img,.sw .in,.sw .out{cursor:pointer}
+/*GAMECSS*/
 </style>
 </head>
 <body>
@@ -118,6 +119,8 @@ textarea{min-height:120px;font-size:13px}
   <div id="cardOut"></div>
 </section>
 
+<section id="t-game"><div id="gameSetup"></div></section>
+
 <section id="t-pre">
   <div class="box">
     <input id="preSearch" placeholder="Szukaj preconu, dowódcy lub setu…">
@@ -137,10 +140,12 @@ textarea{min-height:120px;font-size:13px}
   <button data-t="scan"><b>📷</b>Skaner</button>
   <button data-t="card"><b>🔎</b>Karta</button>
   <button data-t="pre"><b>🗂️</b>Precony</button>
+  <button data-t="game"><b>🎲</b>Gra</button>
   <button data-t="up"><b>⬆️</b>Upgrade</button>
 </nav>
 <div id="toast"></div>
 <div id="zoom"><div id="zoomIn"></div></div>
+<div id="game"></div>
 
 <script type="application/json" id="precons">/*PRECONS*/</script>
 <script>
@@ -314,6 +319,7 @@ function show(t,fromPop){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));
   if(t==='up')renderUpgrade();
   if(t==='pre')renderPre();
+  if(t==='game'&&window.GAME)GAME.renderTab();
   window.scrollTo(0,0);
 }
 
@@ -599,6 +605,7 @@ $('#upBody').onclick=e=>{
 $('#zoom').onclick=()=>history.back();
 window.addEventListener('popstate',e=>{
   const st=e.state||{t:'col'};
+  if(window.GAME&&GAME.back(st))return;
   if($('#zoom').style.display==='block'){$('#zoom').style.display='none';if(!st.zoom)return}
   if(st.zoom){history.back();return}
   if(st.v&&st.v!==state.view&&st.t==='up'){state.view=st.v;saveState();if(curTab==='up'){renderUpgrade();return}}
@@ -851,5 +858,6 @@ history.replaceState({t:'col',v:state.view,d:0},'');
 renderCol();
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
+<script>/*GAMEJS*/</script>
 </body>
 </html>

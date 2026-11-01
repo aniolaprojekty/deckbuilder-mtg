@@ -1,0 +1,53 @@
+/* ---------- game mode ---------- */
+#game{position:fixed;inset:0;background:#000;z-index:30;display:none;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#game.on{display:block}
+#gGrid{position:absolute;inset:0;display:grid;gap:4px;padding:4px}
+.gc{position:relative;container-type:size;border-radius:16px;overflow:hidden;background:#1e2129}
+.gi{position:absolute;top:50%;left:50%;width:100cqw;height:100cqh;transform:translate(-50%,-50%)}
+.gc.r90 .gi{width:100cqh;height:100cqw;transform:translate(-50%,-50%) rotate(90deg)}
+.gc.r270 .gi{width:100cqh;height:100cqw;transform:translate(-50%,-50%) rotate(-90deg)}
+.gc.r180 .gi{transform:translate(-50%,-50%) rotate(180deg)}
+.gbg{position:absolute;inset:0;background-size:cover;background-position:center}
+.gbg::after{content:"";position:absolute;inset:0;background:linear-gradient(#0005,#0008)}
+.glife{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:min(42cqh,30cqw);font-weight:800;color:#fff;text-shadow:0 2px 12px #000;pointer-events:none;font-variant-numeric:tabular-nums}
+.gc.r90 .glife,.gc.r270 .glife{font-size:min(42cqw,30cqh)}
+.gname{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#000a;color:#fff;border-radius:10px;padding:2px 10px;font-size:14px;font-weight:600;white-space:nowrap;pointer-events:none}
+.gtap{position:absolute;top:0;bottom:0;width:50%;display:flex;align-items:center;font-size:30px;color:#fff9;padding:0 6%}
+.gtap.m{left:0;justify-content:flex-start}.gtap.p{right:0;justify-content:flex-end}
+.gtap:active{background:#ffffff14}
+.gmenu{position:absolute;bottom:6px;right:8px;background:#000a;color:#fff;border:0;border-radius:10px;padding:4px 10px;font-size:16px;z-index:2}
+.gcnt{position:absolute;bottom:8px;left:8px;display:flex;gap:4px;flex-wrap:wrap;max-width:75%;pointer-events:none}
+.gcnt span{background:#000b;color:#fff;border-radius:8px;padding:1px 6px;font-size:12px;font-weight:600}
+.gdelta{position:absolute;top:22%;left:50%;transform:translateX(-50%);font-size:22px;font-weight:800;color:#fff;background:#000a;border-radius:10px;padding:0 10px;display:none;pointer-events:none}
+.gdelta.neg{color:#ff8080}.gdelta.pos{color:#7dffa0}
+.gc.active{box-shadow:inset 0 0 0 3px var(--ac)}
+.gc.ko .gbg{filter:grayscale(1) brightness(.35)}
+.gc.ko .glife::after{content:" 💀";font-size:.4em}
+.gbadges{position:absolute;top:8px;right:10px;font-size:18px;pointer-events:none}
+#gBar{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:6px;background:#000d;border:1px solid #333;border-radius:24px;padding:4px 6px;z-index:5}
+#gBar button{background:#1e2129;color:#fff;border:0;border-radius:18px;min-width:38px;height:38px;font-size:17px;padding:0 8px}
+#gBar .turn{font-size:13px;font-weight:700;color:var(--ac)}
+#gSheet{position:absolute;inset:0;background:#000c;z-index:10;display:none;overflow:auto;padding:16px}
+#gSheet.on{display:block}
+.gs{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;max-width:520px;margin:0 auto}
+.gs h3{display:flex;justify-content:space-between;align-items:center}
+.gs .x{background:none;border:0;color:var(--tx);font-size:22px}
+.gr{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.gr:last-child{border:0}
+.gr .lbl{flex:1}
+.gr button.pm{width:40px;height:36px;border-radius:8px;border:0;background:#2c303b;color:var(--tx);font-size:18px}
+.gr .val{min-width:34px;text-align:center;font-weight:700;font-size:18px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{border:1px solid var(--line);background:#0f1115;color:var(--tx);border-radius:18px;padding:6px 12px;font:inherit}
+.chips button.on{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+.dice{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.dice button{background:#2c303b;color:var(--tx);border:0;border-radius:12px;padding:14px 4px;font:inherit;font-weight:600}
+.dres{font-size:44px;font-weight:800;text-align:center;padding:10px;color:var(--ac);min-height:70px}
+.hturn{margin-top:10px;font-weight:700;color:var(--ac)}
+.hrow{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;border-bottom:1px solid #2c303b}
+.plane img{width:100%;border-radius:10px;display:block}
+.sw2{position:relative;width:44px;height:26px;border-radius:13px;background:#2c303b;border:0}
+.sw2.on{background:var(--ac)}
+.sw2::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.sw2.on::after{left:21px}
+.gc.r0 .gname,.gc.r0 .gbadges,.gc.r180 .gname,.gc.r180 .gbadges{top:30px}
