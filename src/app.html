@@ -146,7 +146,7 @@ details summary{cursor:pointer}
   </div>
   <div class="box">
     <h3>Import listy</h3>
-    <div class="mu">Jedna karta w wierszu: „4 Sol Ring”, „1x Arcane Signet (CMR) 297”. Działa z eksportem z Moxfield/Archidekt/ManaBox.</div>
+    <div class="mu">Jedna karta w wierszu: „4 Sol Ring”, „1x Arcane Signet (CMR) 297”. Działa z eksportem z Moxfield/Archidekt/ManaBox.<br><b>Na Androidzie najprościej:</b> w ManaBox wybierz eksport/udostępnij listy → <b>MTG Anioła</b>.</div>
     <textarea id="imp" placeholder="1 Sol Ring&#10;2 Cultivate"></textarea>
     <div class="row" style="margin-top:8px"><button class="btn" id="impBtn">Dodaj do kolekcji</button><button class="btn sec" id="expBtn">Kopiuj kolekcję</button><button class="btn sec" id="clrBtn">🗑️ Usuń kolekcję</button></div>
   </div>
@@ -1084,6 +1084,53 @@ $('#ver').style.cursor='pointer';$('#ver').title='Sprawdź aktualizacje';
 $('#ver').onclick=()=>checkUpdate(true);
 setTimeout(()=>checkUpdate(false),1500);
 (function(){const App=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App;if(App&&App.addListener)App.addListener('resume',()=>checkUpdate(false))})();
+
+/* ---------- receive shared lists ("Udostępnij → MTG Anioła"): text or CSV from ManaBox, Moxfield, … ---------- */
+function csvRows(t){const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;else if(c===','||c===';'&&!t.slice(0,200).includes(',')){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}
+  if(f||row.length){row.push(f);rows.push(row)}return rows.filter(r=>r.some(x=>x.trim()))}
+function parseShared(text){
+  text=text.replace(/^﻿/,'');
+  const first=(text.split(/\r?\n/)[0]||'').toLowerCase();
+  if(/(^|[,;"])\s*"?name"?\s*([,;"]|$)/.test(first)&&/quantity|count|qty|ilo/.test(first)){ // CSV with header
+    const rows=csvRows(text);const h=rows[0].map(x=>x.trim().toLowerCase());
+    const ni=h.indexOf('name'),qi=h.findIndex(x=>/^(quantity|count|qty|ilość|ilosc)$/.test(x));
+    const out={};for(const r of rows.slice(1)){const n=(r[ni]||'').trim();if(!n)continue;const q=parseInt(r[qi],10)||1;out[n]=(out[n]||0)+q}
+    return {map:out,fmt:'CSV'};
+  }
+  return {map:parseList(text),fmt:'lista'};
+}
+async function handleShared(text){
+  if(!text||!text.trim())return;
+  const {map,fmt}=parseShared(text);
+  const n=Object.values(map).reduce((a,b)=>a+b,0),u=Object.keys(map).length;
+  show('col');
+  if(!u){toast('Udostępniony tekst nie zawiera listy kart');return}
+  const has=Object.keys(collection).length;
+  $('#zoomIn').innerHTML=`<h3>Otrzymano listę kart</h3>
+    <div class="mu" style="font-size:14px">${fmt==='CSV'?'Plik CSV':'Lista'} z innej aplikacji: <b>${n}</b> kart (${u} unikalnych).${has?` Twoja kolekcja ma teraz ${Object.values(collection).reduce((a,b)=>a+b,0)} kart.`:''}</div>
+    <div class="ot" style="max-height:140px;overflow:auto;font-size:12px">${Object.entries(map).slice(0,40).map(([k,q])=>esc(q+' '+k)).join('<br>')}${u>40?'<br>…':''}</div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn sec" id="shNo">Anuluj</button>
+      ${has?'<button class="btn sec" id="shRep">Zastąp kolekcję</button>':''}
+      <button class="btn" id="shAdd">Dodaj do kolekcji</button></div>
+    ${has?'<div class="mu" style="margin-top:8px">„Zastąp” = kolekcja będzie dokładnie taka jak ta lista (synchronizacja z ManaBox, bez dublowania).</div>':''}`;
+  $('#zoom').style.display='block';nav({t:curTab,v:state.view,zoom:1});
+  $('#zoomIn').onclick=e=>e.stopPropagation();
+  $('#shNo').onclick=()=>history.back();
+  $('#shAdd').onclick=()=>{history.back();setTimeout(()=>{const k=addToCol(map);toast(`Dodano ${k} kart do kolekcji`);renderCol()},80)};
+  const rep=$('#shRep');if(rep)rep.onclick=()=>{history.back();setTimeout(()=>{collection={};LS.set('mtg.addedPrecons',{});const k=addToCol(map);toast(`Kolekcja zsynchronizowana: ${k} kart`);renderCol()},80)};
+}
+(function(){
+  const P=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.ShareIn;
+  if(P){try{P.addListener('shared',d=>handleShared(d&&d.text));P.getShared().then(r=>r&&r.text&&handleShared(r.text)).catch(()=>{})}catch(e){}}
+  // installed web app on Android (Web Share Target, GET ?text=)
+  const qs=new URLSearchParams(location.search);
+  if(qs.has('share')){const t=[qs.get('text'),qs.get('url')].filter(Boolean).join('\n');history.replaceState(history.state,'',location.pathname);setTimeout(()=>handleShared(t),300)}
+})();
 
 /* ---------- init ---------- */
 (function(){const v=$('#ver');if(v&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())v.textContent+=' · APK'})();
