@@ -5,7 +5,7 @@ const art=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))>>>0;return 'data
 const fake=n=>({name:n,type_line:'Legendary Creature',oracle_text:'',cmc:3,color_identity:['U'],legalities:{commander:'legal'},image_uris:{small:art(n),art_crop:art(n)}});
 (async()=>{const b=await chromium.launch();const pg=await b.newPage({viewport:{width:390,height:844}});const errs=[];pg.on('pageerror',e=>errs.push(e.message));
 let calls=0;
-await pg.addInitScript(()=>{window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{window.__back=cb},exitApp:()=>{window.__exit=1}}}}});
+await pg.addInitScript(()=>{window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{if(ev==='backButton')window.__back=cb},exitApp:()=>{window.__exit=1}}}}});
 await pg.route('https://api.scryfall.com/**',async rt=>{const u=decodeURIComponent(rt.request().url());
   if(u.includes('/cards/collection')){calls++;const ids=JSON.parse(rt.request().postData()).identifiers;return rt.fulfill({json:{data:ids.map(i=>fake(i.name)),not_found:[]}})}
   if(u.includes('autocomplete'))return rt.fulfill({json:{data:['Atraxa, Praetors\' Voice']}});

@@ -2,7 +2,7 @@
 const {chromium}=require('playwright');const http=require('http'),fs=require('fs'),path=require('path');
 const srv=http.createServer((q,r)=>fs.readFile(path.join(__dirname,'..','www',q.url==='/'?'index.html':q.url.split('?')[0]),(e,d)=>{if(e){r.writeHead(404);r.end()}else r.end(d)})).listen(8780);
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:390,height:844},hasTouch:true});const pg=await ctx.newPage();const errs=[];pg.on('pageerror',e=>errs.push(e.message));
-await pg.addInitScript(()=>{window.__exit=0;window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{window.__back=cb},exitApp:()=>{window.__exit++}}}}});
+await pg.addInitScript(()=>{window.__exit=0;window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{if(ev==='backButton')window.__back=cb},exitApp:()=>{window.__exit++}}}}});
 await pg.route('https://api.scryfall.com/**',async rt=>{const u=rt.request().url();
   if(u.includes('/cards/search'))return rt.fulfill({json:{data:[{name:'Fields of Summer',type_line:'Plane — Moag',oracle_text:'Whenever a player casts a spell, that player may gain 2 life.',image_uris:{large:''}},{name:'Chaotic Aether',type_line:'Phenomenon',oracle_text:'Chaos',image_uris:{large:''}}],has_more:false}});
   rt.fulfill({status:404,json:{}})});

@@ -8,7 +8,7 @@ const TY=["Instant","Sorcery","Sorcery","Creature — Zombie Warrior","Creature 
 function fake(n){const k=h(n),land=/Plains|Island|Swamp|Mountain|Forest|Land|Tower|Temple|Path|Grove|Sanctum|Gate|Orchard|Tomb|Coast|Field|Ruins|Peaks/.test(n);
  return {name:n,type_line:land?'Land':TY[k%6],oracle_text:land?'{T}: Add {C}.':TX[k%6],cmc:land?0:1+k%6,edhrec_rank:100+k%25000,game_changer:GC.has(n),color_identity:['B'],legalities:{commander:'legal'},prices:{eur:land?'0.10':String((k%2000)/100)},image_uris:{small:'',art_crop:''}}}
 (async()=>{const b=await chromium.launch();const pg=await b.newPage({viewport:{width:390,height:844}});const errs=[];pg.on('pageerror',e=>errs.push(e.message));
-await pg.addInitScript(()=>{window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{window.__back=cb},exitApp:()=>{window.__exit=1}}}}});
+await pg.addInitScript(()=>{window.Capacitor={Plugins:{App:{addListener:(ev,cb)=>{if(ev==='backButton')window.__back=cb},exitApp:()=>{window.__exit=1}}}}});
 let calls=0;await pg.route('https://api.scryfall.com/**',async rt=>{const u=rt.request().url();if(u.includes('/cards/collection')){calls++;const ids=JSON.parse(rt.request().postData()).identifiers;return rt.fulfill({json:{data:ids.map(i=>fake(i.name)),not_found:[]}})}rt.fulfill({status:404,json:{}})});
 await pg.route('https://backend.commanderspellbook.com/**',rt=>rt.abort());
 await pg.goto('http://localhost:8782/');const back=async()=>{await pg.evaluate(()=>window.__back({}));await pg.waitForTimeout(300)};
