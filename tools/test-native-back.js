@@ -7,8 +7,8 @@ await pg.addInitScript(()=>{window.__exit=0;window.Capacitor={Plugins:{App:{addL
 await pg.route('https://api.scryfall.com/**',async rt=>{const ids=JSON.parse(rt.request().postData()||'{"identifiers":[]}').identifiers;await rt.fulfill({json:{data:ids.map(i=>fake(i.name)),not_found:[]}})});
 await pg.route('https://backend.commanderspellbook.com/**',rt=>rt.abort());await pg.route('https://json.edhrec.com/**',rt=>rt.abort());
 await pg.goto('http://localhost:8769/');
-const where=async()=>({tab:await pg.$eval('nav button.on',e=>e.dataset.t),zoom:await pg.$eval('#zoom',e=>getComputedStyle(e).display),view:await pg.evaluate(()=>state.view),exit:await pg.evaluate(()=>window.__exit)});
-await pg.click('nav button[data-t=pre]');await pg.click('.deck');await pg.waitForSelector('[data-view=deck]',{timeout:15000});
+const where=async()=>({tab:await pg.$eval('section.on',e=>e.id.slice(2)),zoom:await pg.$eval('#zoom',e=>getComputedStyle(e).display),view:await pg.evaluate(()=>state.view),exit:await pg.evaluate(()=>window.__exit)});
+await pg.click('nav button[data-t=pre]');await pg.click('.deck');await pg.waitForSelector('#dvUp',{timeout:20000});await pg.click('#dvUp');await pg.waitForSelector('[data-view=deck]',{timeout:15000});
 await pg.click('[data-view=deck]');await pg.click('.dc');console.log('start',await where());
-for(let i=0;i<5;i++){await pg.evaluate(()=>window.__back({canGoBack:true}));await pg.waitForTimeout(400);console.log('back',i+1,await where())}
+for(let i=0;i<6;i++){await pg.evaluate(()=>window.__back({canGoBack:true}));await pg.waitForTimeout(400);console.log('back',i+1,await where())}
 console.log(errs);await b.close();srv.close()})();

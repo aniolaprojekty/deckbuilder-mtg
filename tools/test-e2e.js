@@ -21,7 +21,7 @@ const T=s=>s.replace(/\s+/g,' ').trim();
  await pg.route('https://backend.commanderspellbook.com/**',rt=>rt.abort());
  await pg.goto('http://localhost:8765/');
  await pg.fill('#imp',Object.keys(REAL).map(n=>'1 '+n).join('\n'));await pg.click('#impBtn');
- await pg.click('nav button[data-t=pre]');await pg.fill('#preSearch','Eternal Might');await pg.click('.deck');await pg.waitForSelector('#autoAcc',{timeout:15000});
+ await pg.click('nav button[data-t=pre]');await pg.fill('#preSearch','Eternal Might');await pg.click('.deck');await pg.waitForSelector('#dvUp',{timeout:20000});await pg.click('#dvUp');await pg.waitForSelector('#autoAcc',{timeout:15000});
  const head=async()=>T(await pg.textContent('#upHead')).match(/po zmianach: Bracket \S+ \(\d+ zamian\)/)[0];
  console.log('KEEP list:',T(await pg.textContent('#upBody h3')),'|',T(await pg.textContent('#upBody .mu')).slice(-40));
  await pg.click('#autoAcc');console.log('KEEP auto:',await head());

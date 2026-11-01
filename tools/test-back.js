@@ -5,8 +5,8 @@ function fake(n){return {name:n,type_line:'Instant',oracle_text:'Draw two cards.
 await pg.route('https://api.scryfall.com/**',async rt=>{const ids=JSON.parse(rt.request().postData()||'{"identifiers":[]}').identifiers;await rt.fulfill({json:{data:ids.map(i=>fake(i.name)),not_found:[]}})});
 await pg.route('https://backend.commanderspellbook.com/**',rt=>rt.abort());await pg.route('https://json.edhrec.com/**',rt=>rt.abort());
 await pg.goto('http://localhost:8768/');
-const where=async()=>({tab:await pg.$eval('nav button.on',e=>e.dataset.t),zoom:await pg.$eval('#zoom',e=>getComputedStyle(e).display),view:await pg.evaluate(()=>state.view)});
-await pg.click('nav button[data-t=pre]');await pg.click('.deck');await pg.waitForSelector('[data-view=deck]',{timeout:15000});
+const where=async()=>({tab:await pg.$eval('section.on',e=>e.id.slice(2)),zoom:await pg.$eval('#zoom',e=>getComputedStyle(e).display),view:await pg.evaluate(()=>state.view)});
+await pg.click('nav button[data-t=pre]');await pg.click('.deck');await pg.waitForSelector('#dvUp',{timeout:20000});await pg.click('#dvUp');await pg.waitForSelector('[data-view=deck]',{timeout:15000});
 await pg.click('[data-view=deck]');await pg.click('.dc');console.log('start',await where());
-for(let i=0;i<4;i++){await pg.goBack().catch(()=>{});await pg.waitForTimeout(400);console.log('back',i+1,await where(),pg.url())}
+for(let i=0;i<5;i++){await pg.goBack().catch(()=>{});await pg.waitForTimeout(400);console.log('back',i+1,await where(),pg.url())}
 console.log(errs);await b.close();srv.close()})();

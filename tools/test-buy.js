@@ -15,7 +15,7 @@ function fake(n){const E=EDH[n],k=h(n),land=!E&&/Plains|Island|Swamp|Mountain|Fo
  await pg.route('https://backend.commanderspellbook.com/**',rt=>rt.abort());
  let edhUrl='';await pg.route('https://json.edhrec.com/**',rt=>{edhUrl=rt.request().url();rt.fulfill({json:{container:{json_dict:{cardlists:[{tag:'highsynergycards',cardviews:Object.entries(EDH).map(([n,v])=>({name:n,synergy:v[1],num_decks:Math.round(v[0]*1000),potential_decks:1000}))}]}}},headers:{'access-control-allow-origin':'*'}})});
  await pg.goto('http://localhost:8767/');await pg.fill('#imp','1 Arcane Signet');await pg.click('#impBtn');
- await pg.click('nav button[data-t=pre]');await pg.fill('#preSearch','Eternal Might');await pg.click('.deck');await pg.waitForSelector('[data-view=buy]',{timeout:15000});
+ await pg.click('nav button[data-t=pre]');await pg.fill('#preSearch','Eternal Might');await pg.click('.deck');await pg.waitForSelector('#dvUp',{timeout:20000});await pg.click('#dvUp');await pg.waitForSelector('[data-view=buy]',{timeout:15000});
  await pg.click('[data-view=buy]');await pg.waitForSelector('#cpBuy',{timeout:15000});console.log(await pg.evaluate(()=>{const d=DECKS.find(x=>x.id===state.deck);const p=BUY[d.id];return JSON.stringify({src:p.src,n:p.score.size,cmd:d.commanders.map(card),rh:card('Rhystic Study')})}));console.log('edhrec url:',edhUrl);
  const sum=async l=>{const t=(await pg.textContent('#upBody')).replace(/\s+/g,' ');console.log(l,t.match(/Po zmianach.*?(Pominięto[^K]*)?Kopiuj/)[0].replace('Kopiuj',''));
    console.log('   ',(await pg.$$eval('.sw .in',e=>e.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).join(' | '))};
