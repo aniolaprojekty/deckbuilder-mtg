@@ -51,3 +51,12 @@
 .sw2::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
 .sw2.on::after{left:21px}
 .gc.r0 .gname,.gc.r0 .gbadges,.gc.r180 .gname,.gc.r180 .gbadges{top:30px}
+#pick{position:fixed;inset:0;background:#000d;z-index:40;display:none;overflow:auto;padding:16px}
+#pick.on{display:block}
+.pkg{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
+.pki{background:#0f1115;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;cursor:pointer}
+.pki b,.pki .mu{display:block;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pki b{padding-top:6px}.pki .mu{padding-bottom:8px;font-size:11px}
+.pkimg{position:relative;aspect-ratio:4/3;background:#2c303b center/cover}
+.pkstar{position:absolute;top:4px;right:6px;color:var(--ac);font-size:18px;text-shadow:0 1px 4px #000}
+.seatimg{width:52px;height:40px;border-radius:8px;background-size:cover;background-position:center;flex:0 0 52px}

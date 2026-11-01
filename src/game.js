@@ -10,6 +10,9 @@ let S=LS.get('mtg.game',null);              // running game
 let opts={...DEF_OPTS,...LS.get('mtg.gameOpts',{})};
 opts.n=Math.min(4,Math.max(2,opts.n||4));opts.life=40;opts.cmdLoss=true; // Commander only
 let names=LS.get('mtg.gameNames',[]);
+let SEATS=LS.get('mtg.gameSeats',[]);           // per seat: {deck,cmdr,img}
+const saveSeats=()=>LS.set('mtg.gameSeats',SEATS);
+const shortCmdr=c=>(c||'').split(' / ').map(x=>x.split(',')[0].split(' // ')[0]).join(' & ');
 const save=()=>LS.set('mtg.game',S);
 const saveOpts=()=>LS.set('mtg.gameOpts',opts);
 
@@ -19,7 +22,7 @@ function newGame(){
      players:Array.from({length:opts.n},(_,i)=>{
        const old=prev&&prev.players[i];
        return {name:names[i]||('Gracz '+(i+1)),life:opts.life,poison:0,energy:0,exp:0,treasure:0,rad:0,tax:0,cmd:{},
-               ko:false,color:COLORS[i%COLORS.length],img:old?old.img:'',cmdr:old?old.cmdr:''}})};
+               ko:false,color:COLORS[i%COLORS.length],img:(SEATS[i]||{}).img||'',cmdr:(SEATS[i]||{}).cmdr||'',deck:(SEATS[i]||{}).deck||''}})};
   save();
 }
 /* ---------- layout: seats around the phone ---------- */
@@ -57,7 +60,7 @@ function paint(){
     const bg=c.querySelector('.gbg');
     bg.style.backgroundColor=p.color;bg.style.backgroundImage=p.img?`url("${p.img}")`:'';
     c.querySelector('.glife').textContent=p.life;
-    c.querySelector('.gname').textContent=p.name;
+    c.querySelector('.gname').innerHTML=esc(p.name)+(p.cmdr?`<span style="font-weight:400;opacity:.8"> · ${esc(shortCmdr(p.cmdr))}</span>`:'');
     c.querySelector('.gbadges').textContent=(S.monarch===i?'👑':'')+(S.initiative===i?'🏰':'');
     const cmdT=Object.entries(p.cmd).filter(([,v])=>v>0).map(([k,v])=>`⚔️${v}←${(S.players[k]||{}).name||'?'}`);
     c.querySelector('.gcnt').innerHTML=[...CNT.filter(([k])=>p[k]).map(([k,ic])=>`${ic}${p[k]}`),...cmdT].map(x=>`<span>${esc(x)}</span>`).join('');
@@ -114,7 +117,7 @@ function playerSheet(i){
   const p=S.players[i];
   sheet(`<h3>${esc(p.name)}<button class="x">✕</button></h3>
     <div class="gr"><input id="gpName" value="${esc(p.name)}" placeholder="Imię"></div>
-    <div class="gr" style="flex-wrap:wrap"><input id="gpCmdr" value="${esc(p.cmdr||'')}" placeholder="Dowódca (grafika w tle)…" autocomplete="off"><div id="gpSug" style="width:100%"></div></div>
+    <div class="gr"><div class="seatimg" style="${p.img?`background-image:url('${esc(p.img)}')`:`background:${p.color}`}"></div><span class="lbl">${p.cmdr?esc(p.cmdr):'<span class="mu">Bez dowódcy</span>'}</span><button class="btn sec" data-pick="1">🃏 Talia</button></div>
     <div class="gr chips">${COLORS.map(c=>`<button data-col="${c}" style="background:${c};width:34px;height:34px;padding:0;${p.color===c?'outline:3px solid #fff':''}"></button>`).join('')}${p.img?'<button data-noimg="1">Usuń grafikę</button>':''}</div>
     ${pmRow('❤️ Życie',p.life,'life')}
     ${CNT.map(([k,ic,l])=>pmRow(`${ic} ${l}`,p[k],k)).join('')}
@@ -129,22 +132,15 @@ function playerSheet(i){
       if(b.dataset.k){const k=b.dataset.k,d=+b.dataset.d;
         if(k==='life')changeLife(i,d);else if(k.startsWith('cmd'))changeCmd(i,+k.slice(3),d);else changeCnt(i,k,k==='tax'?d*2:d);
         playerSheetRefresh(i);return}
+      if(b.dataset.pick){openPicker(p.name,sel=>{Object.assign(p,sel);SEATS[i]={...sel};saveSeats();paint();playerSheetRefresh(i)});return}
       if(b.dataset.col){p.color=b.dataset.col;paint();playerSheetRefresh(i);return}
-      if(b.dataset.noimg){p.img='';p.cmdr='';paint();playerSheetRefresh(i);return}
+      if(b.dataset.noimg){p.img='';p.cmdr='';p.deck='';SEATS[i]={};saveSeats();paint();playerSheetRefresh(i);return}
       if(b.dataset.tog==='active'){S.active=i;S.turnStart=Date.now();paint();playerSheetRefresh(i);return}
       if(b.dataset.tog){const k=b.dataset.tog;S[k]=S[k]===i?-1:i;log({p:i,k,d:S[k]===i?1:-1,v:S[k]===i?1:0});paint();playerSheetRefresh(i);return}
       if(b.dataset.ko){p.ko=!p.ko;if(!p.ko&&opts.autoKO&&isKO({...p,ko:false})){p.life=Math.max(p.life,1);p.poison=Math.min(p.poison,9);for(const k in p.cmd)p.cmd[k]=Math.min(p.cmd[k],20)}
         log({p:i,k:'ko',d:p.ko?1:-1,v:p.ko?1:0});paint();playerSheetRefresh(i);return}
       const sg=e.target.closest('[data-cn]');
     };
-    let acT;const q=sh.querySelector('#gpCmdr');
-    q.oninput=()=>{clearTimeout(acT);const v=q.value.trim();if(v.length<3){sh.querySelector('#gpSug').innerHTML='';return}
-      acT=setTimeout(async()=>{try{const r=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(v));const j=await r.json();
-        sh.querySelector('#gpSug').innerHTML=(j.data||[]).slice(0,6).map(n=>`<div class="sg" data-cn="${esc(n)}">${esc(n)}</div>`).join('')}catch(e){}},250)};
-    sh.querySelector('#gpSug').onclick=async e=>{const n=e.target.closest('[data-cn]');if(!n)return;
-      try{const r=await wfetch(SCRY+'/cards/named?exact='+encodeURIComponent(n.dataset.cn));const c=await r.json();
-        const iu=c.image_uris||(c.card_faces&&c.card_faces[0].image_uris)||{};
-        p.img=iu.art_crop||iu.normal||'';p.cmdr=c.name;paint();playerSheetRefresh(i)}catch(err){toast('Nie udało się pobrać grafiki')}};
   });
 }
 function playerSheetRefresh(i){const y=$g('#gSheet').scrollTop;sheet.open=true;playerSheet(i);$g('#gSheet').scrollTop=y}
@@ -223,6 +219,48 @@ async function planeSheet(walk){
   });
 }
 function planeSheetRefresh(walk){sheet.open=true;planeSheet(walk)}
+/* ---------- deck / commander picker (photo grid) ---------- */
+const pk=()=>document.getElementById('pick');
+let pickCb=null;
+async function openPicker(who,cb){
+  pickCb=cb;const el=pk();
+  if(!G.pickOpen){G.pickOpen=true;nav({t:curTab,v:state.view,game:G.open?1:undefined,sheet:sheet.open?1:undefined,pick:1})}
+  el.classList.add('on');
+  el.innerHTML=`<div class="gs"><h3>Talia — ${esc(who)}<button class="x" id="pkX">✕</button></h3>
+    <input id="pkQ" placeholder="Szukaj talii lub dowódcy…" autocomplete="off">
+    <div class="mu" style="margin:6px 0">★ = Twoje precony (oznaczone w zakładce Precony). Albo wpisz dowolnego dowódcę:</div>
+    <input id="pkC" placeholder="Własny dowódca (nazwa karty)…" autocomplete="off"><div id="pkS"></div>
+    <div class="prog"><i id="pkP"></i></div><div id="pkG" class="pkg"></div>
+    <div class="row" style="margin-top:10px"><button class="btn sec" id="pkNone">Bez talii (sam kolor)</button></div></div>`;
+  el.querySelector('#pkX').onclick=()=>history.back();
+  el.querySelector('#pkNone').onclick=()=>choose({deck:'',cmdr:'',img:''});
+  el.querySelector('#pkQ').oninput=drawPick;
+  let acT;const c=el.querySelector('#pkC');
+  c.oninput=()=>{clearTimeout(acT);const v=c.value.trim();if(v.length<3){el.querySelector('#pkS').innerHTML='';return}
+    acT=setTimeout(async()=>{try{const r=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(v));const j=await r.json();
+      el.querySelector('#pkS').innerHTML=(j.data||[]).slice(0,6).map(n=>`<div class="sg" data-cn="${esc(n)}">${esc(n)}</div>`).join('')}catch(e){}},250)};
+  el.querySelector('#pkS').onclick=async e=>{const n=e.target.closest('[data-cn]');if(!n)return;
+    try{await fetchCards([n.dataset.cn],null,false,true);const cd=card(n.dataset.cn);choose({deck:'',cmdr:cd.n,img:cd.art||cd.img})}catch(err){toast('Nie udało się pobrać karty')}};
+  el.querySelector('#pkG').onclick=e=>{const it=e.target.closest('[data-deck]');if(!it)return;
+    const d=DECKS.find(x=>x.id===it.dataset.deck);const c0=card(d.commanders[0])||{};
+    choose({deck:d.id,cmdr:d.commanders.join(' / '),img:c0.art||c0.img||''})};
+  drawPick();
+  // load commander art for all precons (cached after first time)
+  const all=[...new Set(DECKS.flatMap(d=>d.commanders.slice(0,1)))];
+  const missing=all.filter(n=>{const x=card(n);return !x||x.art===undefined});
+  if(missing.length){try{await fetchCards(all,p=>{const b=document.getElementById('pkP');if(b)b.style.width=(p*100)+'%'},false,true)}catch(e){toast('Brak połączenia — zdjęcia pojawią się później')}
+    const b=document.getElementById('pkP');if(b)b.style.width=0;if(G.pickOpen)drawPick()}
+}
+function drawPick(){
+  const el=pk();const q=(el.querySelector('#pkQ').value||'').toLowerCase();
+  const list=DECKS.filter(d=>!q||(d.name+' '+d.commanders.join(' ')+' '+d.set).toLowerCase().includes(q))
+    .sort((a,b)=>(mine.has(b.id)-mine.has(a.id))||b.date.localeCompare(a.date));
+  el.querySelector('#pkG').innerHTML=list.map(d=>{const c=card(d.commanders[0])||{};const im=c.art||c.img;
+    return `<div class="pki" data-deck="${esc(d.id)}"><div class="pkimg" style="${im?`background-image:url('${esc(im)}')`:''}">${mine.has(d.id)?'<span class="pkstar">★</span>':''}</div>
+      <b>${esc(shortCmdr(d.commanders.join(' / '))||d.name)}</b><span class="mu">${esc(d.name)}</span></div>`}).join('')||'<div class="mu">Brak wyników.</div>';
+}
+function choose(sel){const cb=pickCb;pickCb=null;history.back();setTimeout(()=>cb&&cb(sel),60)}
+function closePicker(){pk().classList.remove('on');G.pickOpen=false}
 /* ---------- settings ---------- */
 function settingsHTML(inGame){
   const tog=(k,l,d)=>`<div class="gr"><span class="lbl">${l}${d?`<div class="mu">${d}</div>`:''}</span><button class="sw2 ${opts[k]?'on':''}" data-opt="${k}"></button></div>`;
@@ -259,7 +297,7 @@ async function wake(){
 }
 document.addEventListener('visibilitychange',()=>{if(G.open)wake()});
 /* ---------- open / close ---------- */
-const G=window.GAME={open:false};
+const G=window.GAME={open:false,pickOpen:false};
 G.start=function(fresh){
   if(fresh||!S||S.players.length!==opts.n&&fresh!==false)newGame();
   const el=document.getElementById('game');el.classList.add('on');G.open=true;
@@ -269,16 +307,24 @@ G.start=function(fresh){
 };
 G.back=function(st){ // called from popstate with the state we landed on; true if handled
   let h=false;
+  if(G.pickOpen&&!(st&&st.pick)){closePicker();h=true}
   if(sheet.open&&!(st&&st.sheet)){closeSheet();h=true}
   if(G.open&&!(st&&st.game)){document.getElementById('game').classList.remove('on');G.open=false;clearInterval(tick);if(lock){lock.release();lock=null}renderGameTab();h=true}
   return h;
 };
 function renderGameTab(){
   const el=document.getElementById('gameSetup');if(!el)return;
-  el.innerHTML=`<div class="box"><h3>Gra</h3>${settingsHTML(false)}
+  const seatRows=Array.from({length:opts.n},(_,i)=>{const st=SEATS[i]||{};
+    return `<div class="gr"><div class="seatimg" data-seat="${i}" style="${st.img?`background-image:url('${esc(st.img)}')`:`background:${COLORS[i]}`}"></div>
+      <div style="flex:1;min-width:0"><input data-sname="${i}" value="${esc(names[i]||'Gracz '+(i+1))}"><div class="mu" style="font-size:12px;margin-top:2px">${st.cmdr?esc(st.cmdr):'Bez talii'}</div></div>
+      <button class="btn sec" data-seat="${i}">🃏</button></div>`}).join('');
+  el.innerHTML=`<div class="box"><h3>Gra</h3>${settingsHTML(false)}<h3 style="margin-top:12px">Gracze i talie</h3>${seatRows}
     <div class="row" style="margin-top:12px"><button class="btn" id="gStart">${S?'Nowa gra':'Rozpocznij grę'}</button>${S?`<button class="btn sec" id="gCont">Kontynuuj (tura ${S.turn})</button>`:''}</div></div>
-    <div class="box mu">Dotknij lewej/prawej połowy panelu: −1/+1, przytrzymaj: ±10. „⋯” na panelu: imię, grafika dowódcy, liczniki, obrażenia od dowódców, monarcha, inicjatywa. Pasek na środku: ⚙️ ustawienia · T = następna tura · 🎲 kości · 💧 mana · ◐ dzień/noc · 📜 historia.</div>`;
+    <div class="box mu">Dotknij lewej/prawej połowy panelu: −1/+1, przytrzymaj: ±10. „⋯” na panelu: imię, talia, liczniki, obrażenia od dowódców, monarcha, inicjatywa. Pasek na środku: ⚙️ ustawienia · T = następna tura · 🎲 kości · 💧 mana · ◐ dzień/noc · 📜 historia.</div>`;
   bindSettings(el,renderGameTab);
+  el.querySelectorAll('[data-sname]').forEach(inp=>inp.onchange=()=>{const i=+inp.dataset.sname;names[i]=inp.value.trim()||('Gracz '+(i+1));LS.set('mtg.gameNames',names)});
+  el.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>{const i=+b.dataset.seat;
+    openPicker(names[i]||'Gracz '+(i+1),sel=>{SEATS[i]={...sel};saveSeats();renderGameTab()})});
   el.querySelector('#gStart').onclick=()=>G.start(true);
   const c=el.querySelector('#gCont');if(c)c.onclick=()=>G.start(false);
 }

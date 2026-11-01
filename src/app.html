@@ -146,6 +146,7 @@ textarea{min-height:120px;font-size:13px}
 <div id="toast"></div>
 <div id="zoom"><div id="zoomIn"></div></div>
 <div id="game"></div>
+<div id="pick"></div>
 
 <script type="application/json" id="precons">/*PRECONS*/</script>
 <script>
@@ -181,15 +182,15 @@ const saveCol=()=>LS.set('mtg.collection',collection);
 function slim(c){
   const f=c.card_faces||[];
   const o=c.oracle_text!=null?c.oracle_text:f.map(x=>x.oracle_text||'').join('\n');
-  const img=(c.image_uris||(f[0]&&f[0].image_uris)||{}).small||'';
+  const iu0=c.image_uris||(f[0]&&f[0].image_uris)||{};const img=iu0.small||'',art=iu0.art_crop||'';
   return {n:c.name,ci:(c.color_identity||[]).join(''),t:c.type_line||f.map(x=>x.type_line).join(' // '),o,cmc:c.cmc||0,
-          r:c.edhrec_rank||null,gc:!!c.game_changer,lg:(c.legalities||{}).commander||'legal',img,
+          r:c.edhrec_rank||null,gc:!!c.game_changer,lg:(c.legalities||{}).commander||'legal',img,art,
           p:(c.prices&&(c.prices.eur!=null?+c.prices.eur:c.prices.eur_foil!=null?+c.prices.eur_foil:c.prices.usd!=null?+c.prices.usd*0.92:null))};
 }
 function put(c){const s=slim(c);cache[s.n.toLowerCase()]=s;const front=s.n.split(' // ')[0].toLowerCase();if(!cache[front])cache[front]=s;return s}
 const card=n=>cache[n.toLowerCase()]||cache[n.split(' // ')[0].toLowerCase()];
-async function fetchCards(names,onProg,needPrice){
-  const need=[...new Set(names)].filter(n=>!card(n)||(needPrice&&card(n).p===undefined));
+async function fetchCards(names,onProg,needPrice,needArt){
+  const need=[...new Set(names)].filter(n=>!card(n)||(needPrice&&card(n).p===undefined)||(needArt&&card(n).art===undefined));
   const missing=[];
   for(let i=0;i<need.length;i+=75){
     const batch=need.slice(i,i+75);
