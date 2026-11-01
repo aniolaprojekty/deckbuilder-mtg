@@ -121,6 +121,9 @@ details summary{cursor:pointer}
 .cg img{width:100%;display:block;border-radius:4.5%}
 .cgph{aspect-ratio:63/88;border-radius:4.5%;background:var(--soft);display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;padding:6px;color:var(--text-dim)}
 .cgq{position:absolute;right:4px;bottom:4px;background:var(--ink);color:#fff;border-radius:var(--r-tag);padding:0 6px;font-size:12px;font-weight:600}
+#upd{position:sticky;top:52px;z-index:6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 14px 0;padding:10px 12px;background:var(--bg-panel);border-left:3px solid var(--teal);border-radius:var(--r-btn);box-shadow:var(--shadow-up);font-size:13.5px}
+#upd span{flex:1;min-width:150px}
+#upd .btn{min-height:32px;text-decoration:none}
 .designed{text-align:center;color:var(--text-faint);font-size:12px;padding:18px 0 8px}
 .designed b{color:var(--text);font-weight:600}
 /*GAMECSS*/
@@ -986,6 +989,37 @@ $('#cardPhoto').onchange=async e=>{
   }catch(err){msg.innerHTML=`<span class="warn">${esc(err.message||err)}</span>`}
   finally{setTimeout(()=>prog.style.width=0,800)}
 };
+
+/* ---------- update check (APK only): compare built-in commit with the latest GitHub release ---------- */
+const APP_VER='__VERSION__';
+const APK_URL='https://github.com/aniolaprojekty/deckbuilder-mtg/releases/download/latest/deckbuilder-mtg.apk';
+const isNative=()=>!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+function updBanner(info){
+  let b=document.getElementById('upd');
+  if(!info){if(b)b.remove();return}
+  if(LS.get('mtg.updSkip','')===info.sha)return;
+  if(!b){b=document.createElement('div');b.id='upd';document.querySelector('header').after(b)}
+  b.innerHTML=`<span>Dostępna nowa wersja aplikacji${info.build?` (build ${esc(info.build)})`:''}.</span><a class="btn" href="${APK_URL}" target="_blank" rel="noopener">Pobierz</a><button class="btn sec" id="updX">✕</button>`;
+  b.querySelector('#updX').onclick=()=>{LS.set('mtg.updSkip',info.sha);b.remove()};
+}
+async function checkUpdate(manual){
+  if(!isNative()){if(manual)toast('Wersja w przeglądarce aktualizuje się sama — odśwież stronę.');return}
+  if(APP_VER==='dev'){if(manual)toast('Wersja deweloperska');return}
+  const last=LS.get('mtg.updChk',{t:0});
+  if(!manual&&Date.now()-last.t<3*3600e3){if(last.sha&&last.sha!==APP_VER)updBanner(last);return}
+  try{
+    const r=await wfetch('https://api.github.com/repos/aniolaprojekty/deckbuilder-mtg/releases/tags/latest',{headers:{Accept:'application/vnd.github+json'}});
+    if(!r.ok)throw new Error(r.status);
+    const j=await r.json();const m=(j.body||'').match(/\b[0-9a-f]{40}\b/);const sha=m?m[0].slice(0,7):'';
+    const bm=(j.name||'').match(/build (\d+)/);const info={t:Date.now(),sha,build:bm?bm[1]:''};
+    LS.set('mtg.updChk',info);
+    if(sha&&sha!==APP_VER){if(manual)LS.set('mtg.updSkip','');updBanner(info)}else{updBanner(null);if(manual)toast('Masz najnowszą wersję ✓')}
+  }catch(e){if(manual)toast('Nie udało się sprawdzić aktualizacji')}
+}
+$('#ver').style.cursor='pointer';$('#ver').title='Sprawdź aktualizacje';
+$('#ver').onclick=()=>checkUpdate(true);
+setTimeout(()=>checkUpdate(false),1500);
+(function(){const App=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App;if(App&&App.addListener)App.addListener('resume',()=>checkUpdate(false))})();
 
 /* ---------- init ---------- */
 (function(){const v=$('#ver');if(v&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())v.textContent+=' · APK'})();
