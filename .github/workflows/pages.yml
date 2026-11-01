@@ -1,7 +1,7 @@
 name: Deploy web app
-# Manual only until GitHub Pages is enabled (Settings → Pages → Source: GitHub Actions).
-# Then switch back to: on: { push: { branches: [main] }, workflow_dispatch: }
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,7 +16,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 tools/build.py
       - uses: actions/configure-pages@v5
-        with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3
         with: { path: www }
       - id: d
