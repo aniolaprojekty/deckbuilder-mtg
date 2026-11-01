@@ -438,7 +438,7 @@ function draw(d){
   $('#rstAcc').onclick=()=>{state.accepted=[];saveState();draw(d)};
   $('#autoAcc').onclick=()=>{ // greedy: best gains first, keep bracket <= target
     const pick=[];
-    for(const s of sugg){if(bracket(applySwaps(d,[...pick,s])).b<=target)pick.push(s)}
+    for(const s of raiseFirst(sugg,mode,(a,b)=>(a.inn.r||9e9)-(b.inn.r||9e9))){if(bracket(applySwaps(d,[...pick,s])).b<=target)pick.push(s)}
     state.accepted=pick.map(s=>s.inn.n);saveState();draw(d);toast(`Wybrano ${pick.length} zamian`)};
   $('#upHead').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;
     // drop accepted swaps that exceed the new target
@@ -487,6 +487,12 @@ function drawDeck(d,acc){
         ${c.qty>1?`<span class="mu">×${c.qty}</span>`:''}${c.gc?'<span class="pill b3">GC</span>':''}</div>`}).join('')}</div>`}).join('');
 }
 
+// In "raise" modes, Game Changers (the cards that actually lift the bracket) are picked first,
+// strongest first; the bracket check then caps them (B3: max 3). Everything else follows by gain.
+function raiseFirst(list,mode,cmp){
+  if(mode==='keep')return list;
+  return [...list.filter(s=>s.inn.gc).sort(cmp),...list.filter(s=>!s.inn.gc)];
+}
 /* ---------- buy list (EDHREC per commander, fallback Scryfall) ---------- */
 const slugify=n=>n.split(' // ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\s-]/g,'').trim().replace(/\s+/g,'-');
 const BUY={};            // deckId -> {src, score:Map(name->score), names:[]}
@@ -547,7 +553,7 @@ async function drawBuy(d,b0,target,mode){
   const all=buySuggest(d,pool);
   // greedy: best gain first, within bracket target and budget
   const pick=[],skip={br:0,price:0};let total=0;
-  for(const s of all){
+  for(const s of raiseFirst(all,mode,(a,b)=>b.inn.s-a.inn.s)){
     const cost=s.own?0:(s.inn.p||0);
     if(!s.own&&per&&(s.inn.p==null||s.inn.p>per)){skip.price++;continue}
     if(!s.own&&budget&&total+cost>budget){skip.price++;continue}
@@ -558,6 +564,7 @@ async function drawBuy(d,b0,target,mode){
   const sum=shown.reduce((t,s)=>t+(s.own?0:(s.inn.p||0)),0);
   const bAfter=bracket(applySwaps(d,shown)).b;
   const toBuy=shown.filter(s=>!s.own);
+  const gcAvail=all.filter(s=>s.inn.gc).length,gcIn=shown.filter(s=>s.inn.gc).length;
   body.innerHTML=`<div class="box"><h3>${mode==='keep'?'Lista zakupów — bracket bez zmian':'Lista zakupów — do Bracketu '+bLabel(target)}</h3>
     <div class="mu">Źródło: ${esc(pool.src)}. Każda karta zastępuje najsłabszą kartę preconu w tej samej roli.</div>
     <div class="row" style="margin-top:8px;flex-wrap:nowrap">
@@ -565,6 +572,7 @@ async function drawBuy(d,b0,target,mode){
       <label class="mu" style="flex:1">Max €/karta<input id="maxPer" inputmode="decimal" value="${per||''}" placeholder="bez limitu"></label>
       <label class="mu" style="flex:1">Budżet €<input id="budget" inputmode="decimal" value="${budget||''}" placeholder="bez limitu"></label></div>
     <div style="margin-top:8px">Po zmianach: ${bPill(bAfter)} · do kupienia <b>${toBuy.length}</b> kart · <b>${sum.toFixed(2)} €</b>${shown.length-toBuy.length?` · ${shown.length-toBuy.length} masz w kolekcji`:''}</div>
+    <div class="mu">Game Changery: w liście ${gcIn} z ${gcAvail} dostępnych dla tego dowódcy${mode==='keep'&&gcAvail?' (tryb „Zachowaj” je pomija)':''}.</div>
     ${skip.br||skip.price?`<div class="mu">Pominięto: ${skip.br?skip.br+' przekraczających bracket':''}${skip.br&&skip.price?', ':''}${skip.price?skip.price+' poza budżetem':''}</div>`:''}
     <div class="row" style="margin-top:8px"><button class="btn" id="cpBuy">Kopiuj listę zakupów</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
     <div class="mu" style="margin-top:4px">Listę wkleisz w Cardmarket → Wants → Import.</div>
