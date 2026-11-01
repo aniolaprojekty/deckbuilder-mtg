@@ -25,4 +25,4 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest deckbuilder-mtg.apk --title "Deckbuilder MTG (build ${{ github.run_number }})" --notes "Automatyczny build z commita ${{ github.sha }}" --latest
+          gh release create latest deckbuilder-mtg.apk --title "MTG Anioła (build ${{ github.run_number }})" --notes "Automatyczny build z commita ${{ github.sha }}" --latest

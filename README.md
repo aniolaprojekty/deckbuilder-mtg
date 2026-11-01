@@ -1,4 +1,4 @@
-# Deckbuilder MTG
+# MTG Anioła (Deckbuilder MTG)
 
 Aplikacja na Androida (i w przeglądarce): skanowanie stron klasera, kolekcja kart, wybór preconu Commandera i podpowiedzi upgrade'ów z kolekcji, z informacją, czy zmiana podnosi bracket talii.
 

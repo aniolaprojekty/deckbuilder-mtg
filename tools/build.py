@@ -10,6 +10,6 @@ html = html.replace('/*GAMECSS*/', rd('game.css')).replace('/*GAMEJS*/', rd('gam
 ver = (os.environ.get('GITHUB_SHA') or 'dev')[:7]
 html = html.replace('__VERSION__', ver)
 open(os.path.join(www, 'index.html'), 'w', encoding='utf8').write(html.replace('/*PRECONS*/', data))
-for f in ('manifest.webmanifest', 'icon.svg', 'sw.js'):
+for f in ('manifest.webmanifest', 'icon.svg', 'icon-180.png', 'sw.js'):
     shutil.copy(os.path.join(src, f), www)
 print('www/ built')

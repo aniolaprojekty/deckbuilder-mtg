@@ -1,6 +1,6 @@
 {
   "appId": "pl.aniolaprojekty.deckbuilder",
-  "appName": "Deckbuilder MTG",
+  "appName": "MTG Anioła",
   "webDir": "www",
   "plugins": {
     "CapacitorHttp": {
