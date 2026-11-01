@@ -37,5 +37,5 @@ await back();console.log('after back, sheet open:',await pg.$eval('#gSheet',e=>e
 await pg.reload();await pg.click('nav button[data-t=game]');console.log('continue btn:',await pg.textContent('#gCont'));await pg.click('#gCont');console.log('restored life:',await life());
 await back();console.log('game closed:',!(await pg.$eval('#game',e=>e.classList.contains('on'))),'tab:',await pg.$eval('nav button.on',e=>e.dataset.t));
 // layouts
-for(const n of [2,5,6]){await pg.click(`#gameSetup [data-n="${n}"]`);await pg.click('#gStart');await pg.screenshot({path:`/tmp/g${n}.png`});console.log(n+'p cells:',(await pg.$$('#game .gc')).length);await back()}
+for(const n of [2,3]){await pg.click(`#gameSetup [data-n="${n}"]`);await pg.click('#gStart');await pg.screenshot({path:`/tmp/g${n}.png`});console.log(n+'p cells:',(await pg.$$('#game .gc')).length);await back()}
 console.log('errors:',errs);await b.close();srv.close()})();

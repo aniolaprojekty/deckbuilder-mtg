@@ -8,6 +8,7 @@ const CNT=[ // per-player counters shown on panel when non-zero
 const DEF_OPTS={n:4,life:40,cmdLoss:true,autoKO:true,timer:false,plane:false,awake:true};
 let S=LS.get('mtg.game',null);              // running game
 let opts={...DEF_OPTS,...LS.get('mtg.gameOpts',{})};
+opts.n=Math.min(4,Math.max(2,opts.n||4));
 let names=LS.get('mtg.gameNames',[]);
 const save=()=>LS.set('mtg.game',S);
 const saveOpts=()=>LS.set('mtg.gameOpts',opts);
@@ -225,7 +226,7 @@ function planeSheetRefresh(walk){sheet.open=true;planeSheet(walk)}
 /* ---------- settings ---------- */
 function settingsHTML(inGame){
   const tog=(k,l,d)=>`<div class="gr"><span class="lbl">${l}${d?`<div class="mu">${d}</div>`:''}</span><button class="sw2 ${opts[k]?'on':''}" data-opt="${k}"></button></div>`;
-  return `<div class="gr"><span class="lbl">Gracze</span><div class="chips">${[2,3,4,5,6].map(n=>`<button data-n="${n}" class="${opts.n===n?'on':''}">${n}</button>`).join('')}</div></div>
+  return `<div class="gr"><span class="lbl">Gracze</span><div class="chips">${[2,3,4].map(n=>`<button data-n="${n}" class="${opts.n===n?'on':''}">${n}</button>`).join('')}</div></div>
     <div class="gr"><span class="lbl">Życie startowe</span><div class="chips">${[20,25,30,40,60].map(n=>`<button data-life="${n}" class="${opts.life===n?'on':''}">${n}</button>`).join('')}</div></div>
     ${tog('cmdLoss','Obrażenia od dowódcy zabierają życie')}
     ${tog('autoKO','Auto-KO','Życie ≤ 0, 10 trucizny lub 21 od jednego dowódcy')}
