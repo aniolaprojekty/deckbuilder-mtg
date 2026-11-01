@@ -6,7 +6,7 @@ os.makedirs(www, exist_ok=True)
 html = open(os.path.join(src, 'app.html'), encoding='utf8').read()
 data = open(os.path.join(src, 'precons.json'), encoding='utf8').read().replace('</', '<\\/')
 rd = lambda f: open(os.path.join(src, f), encoding='utf8').read()
-html = html.replace('/*GAMECSS*/', rd('game.css')).replace('/*GAMEJS*/', rd('game.js').replace('</script', '<\\/script'))
+html = html.replace('/*GAMECSS*/', rd('game.css')).replace('/*GAMEJS*/', rd('game.js').replace('</script', '<\\/script')).replace('/*PRECJS*/', rd('precons.js').replace('</script', '<\\/script'))
 open(os.path.join(www, 'index.html'), 'w', encoding='utf8').write(html.replace('/*PRECONS*/', data))
 for f in ('manifest.webmanifest', 'icon.svg', 'sw.js'):
     shutil.copy(os.path.join(src, f), www)

@@ -119,12 +119,17 @@ textarea{min-height:120px;font-size:13px}
   <div id="cardOut"></div>
 </section>
 
+<section id="t-deck"><div id="deckView"></div></section>
+
 <section id="t-game"><div id="gameSetup"></div></section>
 
 <section id="t-pre">
   <div class="box">
     <input id="preSearch" placeholder="Szukaj preconu, dowódcy lub setu…">
     <label class="mu" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="preMine" style="width:auto"> Tylko moje precony (★)</label>
+    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><select id="preSort" style="flex:1"><option value="new">Najnowsze</option><option value="power">Ranking siły</option><option value="value">Wartość (€)</option><option value="bracket">Bracket</option></select>
+      <button class="btn sec" id="preRefresh" style="flex:0 0 auto">↻ Przelicz ranking i ceny</button></div>
+    <div class="prog"><i id="preProg"></i></div>
     <div class="mu" style="margin-top:6px" id="preInfo"></div>
   </div>
   <div id="preList"></div>
@@ -321,6 +326,7 @@ function show(t,fromPop){
   if(t==='up')renderUpgrade();
   if(t==='pre')renderPre();
   if(t==='game'&&window.GAME)GAME.renderTab();
+  if(t==='deck'&&window.renderDeck)renderDeck();
   window.scrollTo(0,0);
 }
 
@@ -352,16 +358,9 @@ $('#colList').onclick=e=>{const n=e.target.dataset.del;if(!n)return;collection[n
 
 /* ---------- precons ---------- */
 $('#preSearch').oninput=renderPre;$('#preMine').onchange=renderPre;
-function renderPre(){
-  const q=$('#preSearch').value.toLowerCase();
-  const onlyMine=$('#preMine').checked;
-  const f=DECKS.filter(d=>(!onlyMine||mine.has(d.id))&&(!q||(d.name+' '+d.set+' '+d.commanders.join(' ')).toLowerCase().includes(q)))
-    .sort((a,b)=>(mine.has(b.id)-mine.has(a.id)));
-  $('#preInfo').textContent=onlyMine&&!mine.size?'Nie oznaczyłeś jeszcze żadnego preconu — dotknij ☆ przy talii.':`${f.length} z ${DECKS.length} preconów Commandera · moje: ${mine.size}`;
-  $('#preList').innerHTML=f.slice(0,80).map(d=>`<div class="box deck ${state.deck===d.id?'sel':''}" data-id="${esc(d.id)}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><b>${esc(d.name)}</b> <span class="mu">${d.set} · ${d.date.slice(0,7)}</span><div class="mu">${esc(d.commanders.join(' / ')||'—')}</div></div><button class="btn sec" data-star="${esc(d.id)}" style="font-size:20px;padding:4px 10px;color:${mine.has(d.id)?'var(--ac)':'var(--mu)'}">${mine.has(d.id)?'★':'☆'}</button></div></div>`).join('');
-}
+function renderPre(){if(window.renderPreList)return renderPreList()}
 $('#preList').onclick=e=>{const st=e.target.closest('[data-star]');if(st){const id=st.dataset.star;mine.has(id)?mine.delete(id):mine.add(id);LS.set('mtg.mine',[...mine]);renderPre();return}
-  const el=e.target.closest('.deck');if(!el)return;state.deck=el.dataset.id;state.accepted=[];state.mode='keep';state.view='sug';saveState();show('up')};
+  const el=e.target.closest('.deck');if(!el)return;openDeck(el.dataset.id)};
 
 /* ---------- upgrade engine ---------- */
 function deckCards(d){ // expand to slim cards (with qty)
@@ -859,6 +858,7 @@ history.replaceState({t:'col',v:state.view,d:0},'');
 renderCol();
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
+<script>/*PRECJS*/</script>
 <script>/*GAMEJS*/</script>
 </body>
 </html>
