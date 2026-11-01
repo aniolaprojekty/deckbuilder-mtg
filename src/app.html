@@ -71,7 +71,7 @@ textarea{min-height:120px;font-size:13px}
 </style>
 </head>
 <body>
-<header>Deckbuilder MTG<small id="sub">Kolekcja → precon → upgrade z kontrolą bracketu</small></header>
+<header>Deckbuilder MTG<small id="sub">Kolekcja → precon → upgrade z kontrolą bracketu · <span id="ver">wersja __VERSION__</span></small></header>
 
 <section id="t-col" class="on">
   <div class="box">
@@ -879,6 +879,7 @@ $('#cardPhoto').onchange=async e=>{
 };
 
 /* ---------- init ---------- */
+(function(){const v=$('#ver');if(v&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())v.textContent+=' · APK'})();
 history.replaceState({t:'col',v:state.view,d:0},'');
 renderCol();
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!window.Capacitor){navigator.serviceWorker.register('sw.js').catch(()=>{})}
