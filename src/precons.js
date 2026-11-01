@@ -155,6 +155,29 @@ function drawBuild(d){
   $('#dvTxt').onclick=()=>exportTxt('brakujace-'+fileSafe(d.name)+'.txt',txt+'\n');
   $('#dvCopy').onclick=async()=>{try{await navigator.clipboard.writeText(txt);toast('Skopiowano listę brakujących')}catch(e){toast('Kopiowanie zablokowane')}};
 }
+
+/* add / remove a whole precon to the collection */
+const ADDED=()=>LS.get('mtg.addedPrecons',{});
+function drawColRow(d){
+  const el=$('#dvColRow');if(!el)return;const n=ADDED()[d.id]||0;
+  const cnt=d.cards.reduce((a,c)=>a+c.qty,0);
+  el.innerHTML=`<button class="btn" id="dvAdd">➕ Dodaj precon do kolekcji</button>${n?`<button class="btn sec" id="dvRem">➖ Usuń z kolekcji</button><span class="pill b12">w kolekcji ×${n}</span>`:''}`;
+  $('#dvAdd').onclick=async()=>{
+    if(n&&!(await confirmDialog({title:'Dodać ponownie?',text:`Ten precon jest już dodany do kolekcji (×${n}). Dodać kolejny egzemplarz — ${cnt} kart?`,ok:'Dodaj',danger:false})))return;
+    const m={};d.cards.forEach(c=>m[c.name]=(m[c.name]||0)+c.qty);addToCol(m);
+    const a=ADDED();a[d.id]=(a[d.id]||0)+1;LS.set('mtg.addedPrecons',a);
+    mine.add(d.id);LS.set('mtg.mine',[...mine]);
+    toast(`Dodano ${cnt} kart z „${d.name}”`);renderDeck();
+  };
+  const r=$('#dvRem');if(r)r.onclick=async()=>{
+    if(!(await confirmDialog({title:'Usunąć precon z kolekcji?',text:`Z kolekcji zostanie odjętych ${cnt} kart z „${esc(d.name)}” (jeden egzemplarz talii). Karty, których już nie masz, zostaną pominięte.`,ok:'Usuń z kolekcji'})))return;
+    for(const c of d.cards){const k=Object.keys(collection).find(x=>x.toLowerCase()===c.name.toLowerCase())||c.name;
+      if(collection[k]){collection[k]-=c.qty;if(collection[k]<=0)delete collection[k]}}
+    saveCol();renderCol(true);state.accepted=[];saveState();
+    const a=ADDED();a[d.id]=Math.max(0,(a[d.id]||0)-1);if(!a[d.id])delete a[d.id];LS.set('mtg.addedPrecons',a);
+    toast('Usunięto precon z kolekcji');renderDeck();
+  };
+}
 let curDeck=null;
 async function renderDeck(){
   const d=DECKS.find(x=>x.id===curDeck);const el=$('#deckView');if(!d){el.innerHTML='';return}
@@ -173,7 +196,8 @@ async function renderDeck(){
     <div style="margin-top:8px">${bPill(s.b)}<span class="pill">💶 ${eur(s.v)}</span>${s.score!=null&&s.rank?`<span class="pill">💪 siła ${s.score}/100 · #${s.rank} z ${STATS.n}</span>`:''}</div>
     ${s.why.length?`<div class="mu" style="margin-top:4px">${s.why.map(esc).join('<br>')}</div>`:'<div class="mu" style="margin-top:4px">Brak Game Changerów, MLD, dodatkowych tur i combo 2-kartowych.</div>'}
     ${cmds.map(c=>`<div class="ot" style="margin-top:8px"><b>${esc(c.n)}</b> <span class="mu">${esc(c.t)}</span><br>${symHTML(c.o||'')}</div>`).join('')}
-    <div class="row" style="margin-top:10px"><button class="btn" id="dvUp">⬆️ Ulepsz tę talię</button>
+    <div class="row" style="margin-top:10px" id="dvColRow"></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="dvUp">⬆️ Ulepsz tę talię</button>
       <a class="btn sec" style="text-decoration:none" href="https://www.cardmarket.com/pl/Magic/Products/Search?searchString=${encodeURIComponent(d.name.replace(/\s*\(.*\)$/,''))}" target="_blank" rel="noopener">Pudełko na Cardmarket ↗</a></div>
     <div class="mu" style="margin-top:6px">Wartość = suma aktualnych cen pojedynczych kart (Cardmarket przez Scryfall), nie cena zamkniętego pudełka.</div></div>
   <div class="box" id="dvBuild"></div>
@@ -182,7 +206,7 @@ async function renderDeck(){
   <div class="box"><h3>Lista kart (${cs.reduce((a,c)=>a+c.qty,0)})</h3>${order.filter(r=>groups[r]).map(r=>{const gg=groups[r].sort((a,b)=>(a.cmc-b.cmc)||a.n.localeCompare(b.n));
     return `<div class="hturn">${ROLE_PL[r]} (${gg.reduce((a,c)=>a+c.qty,0)})</div>${gg.map(c=>`<div class="item" data-zoom="${esc(c.n)}" style="cursor:pointer">${c.img?`<img src="${esc(c.img)}" alt="" loading="lazy">`:'<div class="noimg">🔍</div>'}
       <div class="grow"><div>${c.qty>1?c.qty+'× ':''}${esc(c.n)}${c.gc?' <span class="pill b3">GC</span>':''}</div><div class="mu">${esc((c.t||'').split(' — ')[0])} · CMC ${c.cmc}</div></div><span class="mu">${eur(c.p)}</span></div>`).join('')}`}).join('')}</div>`;
-  drawBuild(d);
+  drawBuild(d);drawColRow(d);
   $('#dvUp').onclick=()=>{state.deck=d.id;state.accepted=[];state.mode='keep';state.view='sug';saveState();show('up')};
   $('#dvStar').onclick=()=>{mine.has(d.id)?mine.delete(d.id):mine.add(d.id);LS.set('mtg.mine',[...mine]);renderDeck()};
   if(!STATS.d[d.id]||!STATS.d[d.id].raw){STATS.d[d.id]={...s,score:STATS.d[d.id]&&STATS.d[d.id].score,rank:STATS.d[d.id]&&STATS.d[d.id].rank};LS.set('mtg.precStats',STATS)}

@@ -148,7 +148,7 @@ details summary{cursor:pointer}
     <h3>Import listy</h3>
     <div class="mu">Jedna karta w wierszu: „4 Sol Ring”, „1x Arcane Signet (CMR) 297”. Działa z eksportem z Moxfield/Archidekt/ManaBox.</div>
     <textarea id="imp" placeholder="1 Sol Ring&#10;2 Cultivate"></textarea>
-    <div class="row" style="margin-top:8px"><button class="btn" id="impBtn">Dodaj do kolekcji</button><button class="btn sec" id="expBtn">Kopiuj kolekcję</button><button class="btn sec" id="clrBtn">Wyczyść</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="impBtn">Dodaj do kolekcji</button><button class="btn sec" id="expBtn">Kopiuj kolekcję</button><button class="btn sec" id="clrBtn">🗑️ Usuń kolekcję</button></div>
   </div>
   <div class="designed">MTG Anioła · designed by <b>Anioła</b></div>
 </section>
@@ -229,6 +229,19 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
           set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Brak miejsca w pamięci przeglądarki')}}};
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500)}
+// Confirmation dialog (custom, styled); resolves true/false. Android "back" = cancel.
+function confirmDialog({title,text,ok='Usuń',danger=true,extra=''}){
+  return new Promise(res=>{
+    let done=false;const fin=v=>{if(done)return;done=true;confirmDialog.cur=null;res(v)};
+    confirmDialog.cur=()=>fin(false);
+    $('#zoomIn').innerHTML=`<h3 style="${danger?'color:var(--red)':''}">${title}</h3><div class="mu" style="font-size:14px">${text}</div>${extra}
+      <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn sec" id="cfNo">Anuluj</button><button class="btn" id="cfYes" style="${danger?'background:var(--red)':''}">${ok}</button></div>`;
+    $('#zoom').style.display='block';nav({t:curTab,v:state.view,zoom:1});
+    $('#zoomIn').onclick=e=>e.stopPropagation();
+    $('#cfNo').onclick=()=>{fin(false);history.back()};
+    $('#cfYes').onclick=()=>{fin(true);history.back()};
+  });
+}
 // Order on Cardmarket: copy the list, then show steps + link (Cardmarket has no URL import, the list must be pasted)
 const CM_WANTS='https://www.cardmarket.com/pl/Magic/Wants';
 async function orderCardmarket(text,count){
@@ -451,7 +464,18 @@ function parseList(txt){
 }
 function addToCol(map){let k=0;for(const [n,q] of Object.entries(map)){collection[n]=(collection[n]||0)+q;k+=q}saveCol();renderCol();state.accepted=[];saveState();return k}
 $('#impBtn').onclick=()=>{const m=parseList($('#imp').value);const k=addToCol(m);$('#imp').value='';toast(`Dodano ${k} kart`)};
-$('#clrBtn').onclick=()=>{if($('#clrBtn').dataset.c){collection={};saveCol();renderCol();$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c}else{$('#clrBtn').dataset.c=1;$('#clrBtn').textContent='Na pewno?';setTimeout(()=>{$('#clrBtn').textContent='Wyczyść';delete $('#clrBtn').dataset.c},3000)}};
+$('#clrBtn').onclick=async()=>{
+  const n=Object.values(collection).reduce((a,b)=>a+b,0),u=Object.keys(collection).length;
+  if(!u){toast('Kolekcja jest już pusta');return}
+  const backup=Object.entries(collection).map(([k,q])=>q+' '+k).join('\n');
+  const ok=await confirmDialog({title:'Usunąć całą kolekcję?',text:`Zostanie usuniętych <b>${n}</b> kart (${u} unikalnych). Tej operacji nie można cofnąć.`,ok:'Usuń kolekcję',
+    extra:'<button class="btn sec" id="cfBackup" style="margin-top:12px">📋 Kopiuj kopię zapasową</button>'});
+  if(!ok)return;
+  collection={};saveCol();LS.set('mtg.addedPrecons',{});state.accepted=[];saveState();renderCol(true);toast('Kolekcja usunięta');
+};
+document.addEventListener('click',async e=>{if(e.target&&e.target.id==='cfBackup'){e.stopPropagation();
+  const t=Object.entries(collection).map(([k,q])=>q+' '+k).join('\n');
+  try{await navigator.clipboard.writeText(t);toast('Kopia zapasowa w schowku')}catch(err){exportTxt('kolekcja-kopia.txt',t+'\n')}}},true);
 $('#expBtn').onclick=async()=>{const t=Object.entries(collection).map(([n,q])=>q+' '+n).join('\n');try{await navigator.clipboard.writeText(t);toast('Skopiowano')}catch(e){$('#imp').value=t;toast('Lista wstawiona w pole importu')}};
 /* collection browser: thumbnails, colour & type filters, sort, list/grid */
 const COLF=LS.get('mtg.colF',{c:[],t:'',sort:'name',view:'list'});
@@ -757,10 +781,11 @@ $('#upBody').onclick=e=>{
   if(z){zoom([card(z.dataset.zoom)||{n:z.dataset.zoom}])}
 };
 $('#zoom').onclick=()=>history.back();
+function zoomClosed(){$('#zoomIn').onclick=null;if(confirmDialog.cur)confirmDialog.cur()}
 window.addEventListener('popstate',e=>{
   const st=e.state||{t:'col'};
   if(window.GAME&&GAME.back(st))return;
-  if($('#zoom').style.display==='block'){$('#zoom').style.display='none';if(!st.zoom)return}
+  if($('#zoom').style.display==='block'){$('#zoom').style.display='none';zoomClosed();if(!st.zoom)return}
   if(st.zoom){history.back();return}
   if(st.v&&st.v!==state.view&&st.t==='up'){state.view=st.v;saveState();if(curTab==='up'){renderUpgrade();return}}
   show(st.t||'col',true);
