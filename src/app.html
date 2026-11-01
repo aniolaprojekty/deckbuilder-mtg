@@ -559,11 +559,26 @@ $('#preList').onclick=e=>{const st=e.target.closest('[data-star]');if(st){const 
 function deckCards(d){ // expand to slim cards (with qty)
   return d.cards.map(x=>({...(card(x.name)||{n:x.name,t:'',o:'',ci:'',cmc:0,r:null,gc:false}),qty:x.qty,cmd:d.commanders.includes(x.name)}));
 }
+/* protect my built decks: cards used in my other decks (★ or added precons) are not available for upgrades */
+function myDeckIds(exceptId){const ids=new Set([...mine,...Object.keys(LS.get('mtg.addedPrecons',{}))]);ids.delete(exceptId);return [...ids].filter(id=>DECKS.some(d=>d.id===id))}
+function lockedMap(exceptId){
+  const m=new Map();if(state.protect===false)return m;
+  for(const id of myDeckIds(exceptId)){const d=DECKS.find(x=>x.id===id);
+    for(const c of d.cards){if(BASICS.has(c.name))continue;const k=c.name.toLowerCase();const e=m.get(k)||{q:0,decks:[]};e.q+=c.qty;e.decks.push(d.name);m.set(k,e)}}
+  return m;
+}
+function freeQty(name,locked){
+  const lo=name.toLowerCase(),fr=name.split(' // ')[0].toLowerCase();
+  let own=0;for(const [k,q] of Object.entries(collection)){const kl=k.toLowerCase();if(kl===lo||kl===fr||kl.split(' // ')[0]===fr)own+=q}
+  const l=locked.get(lo)||locked.get(fr);return own-(l?l.q:0);
+}
 function suggest(d){
   const cmdCI=new Set(d.commanders.flatMap(n=>(card(n)||{ci:''}).ci.split('')).filter(Boolean));
   const base=deckCards(d);
   const inDeck=new Set(base.map(c=>c.n));
+  const locked=lockedMap(d.id);suggest.locked=0;
   const cands=Object.keys(collection).map(card).filter(Boolean)
+    .filter(c=>{if(locked.size&&freeQty(c.n,locked)<=0){suggest.locked++;return false}return true})
     .filter(c=>!inDeck.has(c.n)&&!BASICS.has(c.n)&&c.lg==='legal'&&[...c.ci].every(x=>cmdCI.has(x))&&!/\b(token|emblem)\b/i.test(c.t))
     .map(c=>({...c,role:role(c)})).filter(c=>c.r).sort((a,b)=>a.r-b.r);
   const pool=base.filter(c=>!c.cmd&&!BASICS.has(c.n)).map(c=>({...c,role:role(c),rr:c.r||60000}));
@@ -630,11 +645,14 @@ function draw(d){
     ${bNow.why.length?`<div class="mu" style="margin-top:4px">${bNow.why.map(esc).join('<br>')}</div>`:''}
     <div class="mu" style="margin-top:6px">${Object.entries(roles).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${ROLE_PL[r]} ${n}`).join(' · ')}</div>
     <div class="mu" style="margin-top:4px">${spellbook.ok?'Combo: Commander Spellbook + lista wbudowana':'<span class="warn">Combo: tylko lista wbudowana (Spellbook niedostępny)</span>'}${miss.length?` · <span class="warn">Nie znaleziono: ${miss.length}</span>`:''}</div>
+    <label class="mu" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13.5px;color:var(--text)"><input type="checkbox" id="protect" ${state.protect!==false?'checked':''}> 🔒 Nie bierz kart z moich talii</label>
+    <div class="mu" style="font-size:12px">${(()=>{const ids=myDeckIds(d.id);return ids.length?'Chronione: '+ids.map(id=>esc(DECKS.find(x=>x.id===id).name)).join(', '):'Brak innych Twoich talii — oznacz je ★ w Preconach lub dodaj do kolekcji.'})()}</div>
     <div class="seg" style="margin-top:10px">${modes.map(([m,t])=>`<button data-mode="${m}" class="${mode===m?'on':''}">${t}</button>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn" id="autoAcc">Zastosuj najlepsze (cel: B${bLabel(target)})</button><button class="btn sec" id="rstAcc">Cofnij wszystkie</button><button class="btn sec" id="cpDeck">Kopiuj listę</button></div>
     <div class="seg" style="margin-top:10px"><button data-view="sug" class="${view==='sug'?'on':''}">Z kolekcji</button><button data-view="buy" class="${view==='buy'?'on':''}">Do kupienia</button><button data-view="deck" class="${view==='deck'?'on':''}">Lista talii</button></div>`;
   $('#cpDeck').onclick=async()=>{const t=applySwaps(d,acc).map(c=>(c.qty||1)+' '+c.n).join('\n');try{await navigator.clipboard.writeText(t);toast('Lista skopiowana')}catch(e){toast('Kopiowanie zablokowane')}};
   $('#rstAcc').onclick=()=>{state.accepted=[];saveState();draw(d)};
+  $('#protect').onchange=e=>{state.protect=e.target.checked;state.accepted=[];saveState();draw(d)};
   $('#autoAcc').onclick=()=>{ // greedy: best gains first, keep bracket <= target
     const pick=[];
     for(const s of raiseFirst(sugg,mode,(a,b)=>(a.inn.r||9e9)-(b.inn.r||9e9))){if(bracket(applySwaps(d,[...pick,s])).b<=target)pick.push(s)}
@@ -648,7 +666,7 @@ function draw(d){
   if(view==='deck'){drawDeck(d,acc);return}
   if(view==='buy'){drawBuy(d,b0,target,mode);return}
   if(!Object.keys(collection).length){$('#upBody').innerHTML='<div class="box mu">Kolekcja jest pusta — dodaj karty, żeby zobaczyć propozycje.</div>';return}
-  if(!sugg.length){$('#upBody').innerHTML='<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.</div>';return}
+  if(!sugg.length){$('#upBody').innerHTML=`<div class="box mu">Brak lepszych zamienników w kolekcji dla tej talii.${suggest.locked?` 🔒 ${suggest.locked} kart pominięto, bo są w Twoich taliach — odznacz „Nie bierz kart z moich talii”, żeby je uwzględnić.`:''}</div>`;return}
   let hidden=0;
   const items=sugg.map((s,i)=>{
     const isAcc=state.accepted.includes(s.inn.n);
@@ -667,7 +685,7 @@ function draw(d){
   // in "raise" mode show bracket-raising cards first
   if(mode!=='keep')items.sort((a,b)=>b.up-a.up);
   $('#upBody').innerHTML=`<div class="box"><h3>${mode==='keep'?'Upgrade bez zmiany bracketu':'Upgrade do Bracketu '+bLabel(target)} (${items.length})</h3>
-    <div class="mu">＋ z Twojej kolekcji, － z preconu. Dotknij karty, żeby porównać. #liczba = ranking EDHREC (niżej = częściej grana).${hidden?` Ukryto ${hidden} przekraczających cel.`:''}</div>${items.map(x=>x.html).join('')||'<div class="mu" style="margin-top:8px">Brak propozycji mieszczących się w celu.</div>'}</div>`;
+    <div class="mu">＋ z Twojej kolekcji, － z preconu. Dotknij karty, żeby porównać. #liczba = ranking EDHREC (niżej = częściej grana).${hidden?` Ukryto ${hidden} przekraczających cel.`:''}${suggest.locked?` 🔒 Pominięto ${suggest.locked} kart zajętych w Twoich taliach.`:''}</div>${items.map(x=>x.html).join('')||'<div class="mu" style="margin-top:8px">Brak propozycji mieszczących się w celu.</div>'}</div>`;
 }
 function drawDeck(d,acc){
   const outN=new Set(acc.map(s=>s.out.n)),inN=new Set(acc.map(s=>s.inn.n));
@@ -725,6 +743,7 @@ async function loadBuyPool(d){
   BUY[d.id]=pool;return pool;
 }
 function buySuggest(d,pool){
+  const locked=lockedMap(d.id);
   const cmdCI=new Set(d.commanders.flatMap(n=>(card(n)||{ci:''}).ci.split('')).filter(Boolean));
   const sc=c=>pool.fallback?Math.max(0,1-(c.r||40000)/40000):(pool.score.get(c.n)||0);
   const base=deckCards(d),inDeck=new Set(base.map(c=>c.n));
@@ -737,7 +756,7 @@ function buySuggest(d,pool){
     let opts=cut.filter(p=>!used.has(p.n)&&p.role===c.role);
     if(!opts.length&&c.role!=='land')opts=cut.filter(p=>!used.has(p.n)&&(p.role==='other'||p.role==='creature'));
     opts.sort((a,b)=>a.s-b.s);const o=opts[0];
-    if(o&&c.s-o.s>=0.08){used.add(o.n);out.push({inn:c,out:o,gain:c.s-o.s,own:!!collection[c.n]})}
+    if(o&&c.s-o.s>=0.08){used.add(o.n);out.push({inn:c,out:o,gain:c.s-o.s,own:freeQty(c.n,locked)>0,lockedIn:(locked.get(c.n.toLowerCase())||{}).decks})}
   }
   return out.sort((a,b)=>b.gain-a.gain);
 }
@@ -776,7 +795,7 @@ async function drawBuy(d,b0,target,mode){
     <div class="row" style="margin-top:8px"><button class="btn" id="cmBuy">🛒 Zamów na Cardmarket</button><button class="btn sec" id="txtBuy">📄 TXT</button><button class="btn sec" id="cpBuy">Kopiuj</button><button class="btn sec" id="cpBuyDeck">Kopiuj talię po zmianach</button></div>
     <div class="mu" style="margin-top:4px">Listę wkleisz w Cardmarket → Wants → Import.</div>
     ${shown.map((s,i)=>`<div class="sw">${s.inn.img?`<img src="${esc(s.inn.img)}" alt="" loading="lazy" data-bcmp="${i}">`:`<div data-bcmp="${i}" class="noimg">🔍</div>`}
-      <div><div class="in" data-bcmp="${i}">＋ ${esc(s.inn.n)} ${s.own?'<span class="pill b12">masz ✓</span>':`<span class="mu">${s.inn.p!=null?s.inn.p.toFixed(2)+' €':'brak ceny'}</span>`}</div>
+      <div><div class="in" data-bcmp="${i}">＋ ${esc(s.inn.n)} ${s.own?'<span class="pill b12">masz ✓</span>':`<span class="mu">${s.inn.p!=null?s.inn.p.toFixed(2)+' €':'brak ceny'}</span>${s.lockedIn&&collection[s.inn.n]?` <span class="pill">🔒 w: ${esc(s.lockedIn[0])}</span>`:''}`}</div>
       <div class="out" data-bcmp="${i}">－ ${esc(s.out.n)}</div>
       <div class="mu">${ROLE_PL[s.inn.role]} · ocena ${(s.inn.s*100).toFixed(0)} vs ${(s.out.s*100).toFixed(0)}</div>
       <div>${s.inn.gc?'<span class="pill b3">Game Changer</span>':''}${isMLD(s.inn)?'<span class="pill b4">MLD</span>':''}${isXT(s.inn)?'<span class="pill">Extra turn</span>':''}</div>
