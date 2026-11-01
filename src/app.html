@@ -313,6 +313,15 @@ function slim(c){
 }
 function put(c){const s=slim(c);cache[s.n.toLowerCase()]=s;const front=s.n.split(' // ')[0].toLowerCase();if(!cache[front])cache[front]=s;return s}
 const card=n=>cache[n.toLowerCase()]||cache[n.split(' // ')[0].toLowerCase()];
+// Find a card by any printed name: oracle name (fuzzy) or alternate/flavor name (e.g. "Doom Variant" = Roaming Throne)
+async function resolveCard(q){
+  q=(q||'').trim();if(q.length<2)return null;
+  try{const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(q));if(r.ok)return await r.json()}catch(e){}
+  try{const r=await wfetch(SCRY+'/cards/search?unique=cards&order=edhrec&q='+encodeURIComponent(q));
+    if(r.ok){const j=await r.json();const lq=q.toLowerCase();const d=j.data||[];
+      return d.find(c=>(c.flavor_name||'').toLowerCase()===lq||c.name.toLowerCase()===lq||(c.card_faces||[]).some(f=>(f.flavor_name||'').toLowerCase()===lq))||d[0]||null}}catch(e){}
+  return null;
+}
 async function fetchCards(names,onProg,needPrice,needArt){
   const need=[...new Set(names)].filter(n=>!card(n)||(needPrice&&card(n).p===undefined)||(needArt&&card(n).art===undefined));
   const missing=[];
@@ -332,10 +341,10 @@ async function fetchCards(names,onProg,needPrice,needArt){
     onProg&&onProg(Math.min(1,(i+75)/need.length));
     await sleep(110);
   }
-  // retry missing by front face name
-  const retry=missing.filter(n=>n.includes(' // ')||n.includes('/'));
-  for(const n of retry){
-    try{const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(n.split('/')[0].trim()));if(r.ok){const c=put(await r.json());cache[n.toLowerCase()]=c}}catch(e){}
+  // retry missing: front face of split names, alternate/flavor names (Universes Beyond variants), typos
+  for(const n of missing.slice(0,60)){
+    const c=await resolveCard(n.includes('/')?n.split('/')[0].trim():n);
+    if(c){const x=put(c);cache[n.toLowerCase()]=x}
     await sleep(110);
   }
   LS.set('mtg.cards',cache);
@@ -484,12 +493,20 @@ const CCHIPS=[['W','⚪','Biały'],['U','🔵','Niebieski'],['B','⚫','Czarny']
 const TCHIPS=[['creature','Stwory',/creature/i],['instant','Instanty',/instant/i],['sorcery','Sorcery',/sorcery/i],['artifact','Artefakty',/artifact/i],['enchantment','Zaklęcia',/enchantment/i],['planeswalker','Planeswalkery',/planeswalker/i],['land','Lądy',/\bland\b/i],['commander','Kandydaci na dowódcę',/legendary.*creature|can be your commander/i]];
 const WUBRG='WUBRG';
 let colLoading=false;
+function canonCollection(){
+  let ch=false;
+  for(const n of Object.keys(collection)){const c=card(n);if(!c)continue;
+    const lo=n.toLowerCase();if(c.n.toLowerCase()===lo||c.n.split(' // ')[0].toLowerCase()===lo)continue;
+    // only rename when the name was an alternate printed name or a typo resolved by Scryfall
+    collection[c.n]=(collection[c.n]||0)+collection[n];delete collection[n];ch=true}
+  if(ch)saveCol();return ch;
+}
 async function ensureColData(){
   const names=Object.keys(collection).filter(n=>!card(n));
   if(!names.length||colLoading)return;
   colLoading=true;
   try{await fetchCards(names,p=>{const b=$('#colProg');if(b)b.style.width=(p*100)+'%'},false,false)}catch(e){toast('Bez internetu — miniatury pojawią się później')}
-  colLoading=false;const b=$('#colProg');if(b)b.style.width=0;renderCol(true);
+  colLoading=false;canonCollection();const b=$('#colProg');if(b)b.style.width=0;renderCol(true);
 }
 function renderCol(noFetch){
   $('#colColors').innerHTML=CCHIPS.map(([k,ic,l])=>`<button data-cc="${k}" class="${COLF.c.includes(k)?'on':''}" title="${l}">${ic}${k==='M'||k==='C'?' '+l:''}</button>`).join('');
@@ -823,7 +840,7 @@ $('#photo').onchange=async e=>{
       const {data}=await worker.recognize(cv);
       const raw=data.text.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim();
       let name='';
-      if(raw.length>=3){try{const rr=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(raw));if(rr.ok){const cd=put(await rr.json());name=cd.n}}catch(_){}
+      if(raw.length>=3){try{const c=await resolveCard(raw);if(c){const cd=put(c);name=cd.n}}catch(_){}
         if(!name){try{const rr=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(raw.slice(0,20)));const j=await rr.json();name=(j.data||[])[0]||''}catch(_){}}}
       inp.value=name;inp.title='OCR: '+raw;scanRes[i]=inp;
       prog.style.width=((i+1)/(rows*cols)*100)+'%';msg.textContent=`Rozpoznano ${i+1}/${rows*cols}`;
@@ -974,6 +991,7 @@ async function showCard(c){
   const known=COMBOS.filter(p=>p.includes(c.name)).map(p=>p.find(x=>x!==c.name));
   out.innerHTML=`<div class="box">${imgs.map(u=>`<img class="cimg" src="${esc(u)}" alt="">`).join('')}
     <h3>${esc(c.name)} ${c.mana_cost?symHTML(c.mana_cost):''}</h3>
+    ${(c.flavor_name||((c.card_faces||[]).find(f=>f.flavor_name)||{}).flavor_name)?`<div class="pill">na karcie: ${esc(c.flavor_name||(c.card_faces||[]).find(f=>f.flavor_name).flavor_name)}</div>`:''}
     <div class="mu">${esc(c.type_line||'')} · ${esc((c.set_name||''))}</div>
     ${faces.map(x=>`${faces.length>1?`<div style="margin-top:8px"><b>${esc(x.name)}</b> ${x.mana_cost?symHTML(x.mana_cost):''}<div class="mu">${esc(x.type_line||'')}</div></div>`:''}<div class="ot">${symHTML(x.oracle_text||'')}${x.power!=null?`<div style="margin-top:6px"><b>${x.power}/${x.toughness}</b></div>`:''}${x.loyalty?`<div>Lojalność: ${x.loyalty}</div>`:''}</div>`).join('')}
     <div class="row" style="margin-top:8px"><button class="btn" id="cardAdd">＋ Do kolekcji${owned?` (masz ${owned})`:''}</button><a class="btn sec" href="${esc(c.scryfall_uri||'#')}" target="_blank" rel="noopener" style="text-decoration:none">Scryfall ↗</a></div></div>
@@ -998,15 +1016,19 @@ async function showCard(c){
 }
 async function lookupCard(q){
   const msg=$('#cardMsg');msg.textContent='Szukam…';$('#cardSugg').innerHTML='';
-  try{const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(q));
-    if(!r.ok){msg.textContent='Nie znaleziono karty „'+q+'”. Spróbuj wpisać nazwę.';return false}
-    msg.textContent='';await showCard(await r.json());return true}
+  try{const c=await resolveCard(q);
+    if(!c){msg.textContent='Nie znaleziono karty „'+q+'”. Spróbuj wpisać nazwę.';return false}
+    msg.textContent='';await showCard(c);return true}
   catch(e){msg.innerHTML='<span class="warn">Brak połączenia ze Scryfall.</span>';return false}
 }
 let acT=null;
 $('#cardQ').oninput=()=>{clearTimeout(acT);const q=$('#cardQ').value.trim();if(q.length<3){$('#cardSugg').innerHTML='';return}
   acT=setTimeout(async()=>{try{const r=await wfetch(SCRY+'/cards/autocomplete?q='+encodeURIComponent(q));const j=await r.json();
-    $('#cardSugg').innerHTML=(j.data||[]).slice(0,8).map(n=>`<div class="sg" data-n="${esc(n)}">${esc(n)}</div>`).join('')}catch(e){}},250)};
+    let items=(j.data||[]).slice(0,8).map(n=>({n,l:esc(n)}));
+    if(items.length<4){try{const r2=await wfetch(SCRY+'/cards/search?unique=cards&order=edhrec&q='+encodeURIComponent(q));if(r2.ok){const j2=await r2.json();
+      for(const c of (j2.data||[]).slice(0,6)){const fl=c.flavor_name||((c.card_faces||[]).find(f=>f.flavor_name)||{}).flavor_name;
+        if(!items.some(x=>x.n===c.name))items.push({n:c.name,l:fl?`${esc(fl)} <span class="mu">→ ${esc(c.name)}</span>`:esc(c.name)})}}}catch(e){}}
+    if($('#cardQ').value.trim()===q)$('#cardSugg').innerHTML=items.slice(0,8).map(x=>`<div class="sg" data-n="${esc(x.n)}">${x.l}</div>`).join('')}catch(e){}},250)};
 $('#cardQ').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();lookupCard($('#cardQ').value.trim());$('#cardQ').blur()}};
 $('#cardSugg').onclick=e=>{const n=e.target.closest('[data-n]');if(n){$('#cardQ').value=n.dataset.n;lookupCard(n.dataset.n)}};
 $('#cardPhoto').onchange=async e=>{
@@ -1024,8 +1046,8 @@ $('#cardPhoto').onchange=async e=>{
     const {data}=await worker.recognize(cv);await worker.terminate();prog.style.width='80%';
     const lines=data.text.split('\n').map(l=>l.replace(/[^A-Za-z',\- ]/g,' ').replace(/\s+/g,' ').trim()).filter(l=>l.length>=3).sort((a,b)=>b.length-a.length).slice(0,4);
     for(const l of lines){msg.textContent='Dopasowuję: „'+l+'”…';
-      const r=await wfetch(SCRY+'/cards/named?fuzzy='+encodeURIComponent(l));
-      if(r.ok){prog.style.width='100%';msg.textContent='Rozpoznano z OCR: „'+l+'”';$('#cardQ').value='';await showCard(await r.json());return}
+      const c=await resolveCard(l);
+      if(c){prog.style.width='100%';msg.textContent='Rozpoznano z OCR: „'+l+'”';$('#cardQ').value='';await showCard(c);return}
       await sleep(110)}
     msg.innerHTML='<span class="warn">Nie rozpoznałem nazwy'+(lines[0]?' (OCR: „'+esc(lines[0])+'”)':'')+'. Zrób zdjęcie bliżej, z nazwą u góry kadru, albo wpisz nazwę.</span>';
   }catch(err){msg.innerHTML=`<span class="warn">${esc(err.message||err)}</span>`}
